@@ -4,9 +4,12 @@ from pydantic import BaseModel, Field
 
 from app.application.conversation_service import AssistantTurn, ConversationDetail
 from app.application.dashboard_service import DashboardOverview
+from app.application.execution_job_service import ExecutionJobDetail
+from app.application.execution_plan_service import ExecutionPlanDetail
 from app.application.file_service import FileDetail
 from app.application.search_service import SearchResult
 from vault_shared.db.models import (
+    ApprovalRequest,
     Citation,
     Conversation,
     ConversationMessage,
@@ -15,6 +18,10 @@ from vault_shared.db.models import (
     EmbeddingProgress,
     EnrichmentJob,
     EnrichmentProgress,
+    ExecutionJob,
+    ExecutionPlan,
+    ExecutionResult,
+    ExecutionStep,
     File,
     FileClassification,
     FileExtraction,
@@ -737,5 +744,173 @@ class RecommendationJobResponse(BaseModel):
             completed_at=job.completed_at,
             created_at=job.created_at,
         )
+
+
+class ExecutionStepResponse(BaseModel):
+    id: str
+    step_order: int
+    action_type: str
+    target_file_id: str
+    pre_state: dict
+    planned_change: dict
+    status: str
+
+    @classmethod
+    def from_model(cls, step: ExecutionStep) -> "ExecutionStepResponse":
+        return cls(
+            id=str(step.id),
+            step_order=step.step_order,
+            action_type=step.action_type,
+            target_file_id=str(step.target_file_id),
+            pre_state=step.pre_state,
+            planned_change=step.planned_change,
+            status=step.status,
+        )
+
+
+class ExecutionPlanResponse(BaseModel):
+    id: str
+    organization_id: str
+    recommendation_id: str
+    status: str
+    target_provider: str
+    estimated_impact: str
+    estimated_storage_savings_bytes: int | None
+    risk_level: str
+    rollback_available: bool
+    required_permissions: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, plan: ExecutionPlan) -> "ExecutionPlanResponse":
+        return cls(
+            id=str(plan.id),
+            organization_id=str(plan.organization_id),
+            recommendation_id=str(plan.recommendation_id),
+            status=plan.status,
+            target_provider=plan.target_provider,
+            estimated_impact=plan.estimated_impact,
+            estimated_storage_savings_bytes=plan.estimated_storage_savings_bytes,
+            risk_level=plan.risk_level,
+            rollback_available=plan.rollback_available,
+            required_permissions=plan.required_permissions,
+            created_at=plan.created_at,
+            updated_at=plan.updated_at,
+        )
+
+
+class ExecutionPlanDetailResponse(ExecutionPlanResponse):
+    steps: list[ExecutionStepResponse]
+
+    @classmethod
+    def from_detail(cls, detail: ExecutionPlanDetail) -> "ExecutionPlanDetailResponse":
+        base = ExecutionPlanResponse.from_model(detail.plan)
+        return cls(
+            **base.model_dump(),
+            steps=[ExecutionStepResponse.from_model(step) for step in detail.steps],
+        )
+
+
+class CreateExecutionPlanRequest(BaseModel):
+    recommendation_id: str
+
+
+class ApprovalRequestResponse(BaseModel):
+    id: str
+    execution_plan_id: str
+    organization_id: str
+    status: str
+    expires_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, request: ApprovalRequest) -> "ApprovalRequestResponse":
+        return cls(
+            id=str(request.id),
+            execution_plan_id=str(request.execution_plan_id),
+            organization_id=str(request.organization_id),
+            status=request.status,
+            expires_at=request.expires_at,
+            created_at=request.created_at,
+            updated_at=request.updated_at,
+        )
+
+
+class ApprovalDecisionRequest(BaseModel):
+    decision: str = Field(pattern="^(approve|reject|request_changes)$")
+    comments: str | None = Field(default=None, max_length=4096)
+
+
+class BulkApprovalDecisionRequest(BaseModel):
+    approval_request_ids: list[str] = Field(min_length=1, max_length=100)
+    decision: str = Field(pattern="^(approve|reject|request_changes)$")
+    comments: str | None = Field(default=None, max_length=4096)
+
+
+class ExecutionJobResponse(BaseModel):
+    id: str
+    execution_plan_id: str
+    organization_id: str
+    status: str
+    is_rollback: bool
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, job: ExecutionJob) -> "ExecutionJobResponse":
+        return cls(
+            id=str(job.id),
+            execution_plan_id=str(job.execution_plan_id),
+            organization_id=str(job.organization_id),
+            status=job.status,
+            is_rollback=job.is_rollback,
+            error=job.error,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            created_at=job.created_at,
+        )
+
+
+class ExecutionResultResponse(BaseModel):
+    id: str
+    execution_step_id: str
+    status: str
+    verification_status: str
+    error: str | None
+    executed_at: datetime
+    verified_at: datetime | None
+
+    @classmethod
+    def from_model(cls, result: ExecutionResult) -> "ExecutionResultResponse":
+        return cls(
+            id=str(result.id),
+            execution_step_id=str(result.execution_step_id),
+            status=result.status,
+            verification_status=result.verification_status,
+            error=result.error,
+            executed_at=result.executed_at,
+            verified_at=result.verified_at,
+        )
+
+
+class ExecutionJobDetailResponse(ExecutionJobResponse):
+    results: list[ExecutionResultResponse]
+
+    @classmethod
+    def from_detail(cls, detail: ExecutionJobDetail) -> "ExecutionJobDetailResponse":
+        base = ExecutionJobResponse.from_model(detail.job)
+        return cls(
+            **base.model_dump(),
+            results=[ExecutionResultResponse.from_model(result) for result in detail.results],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 9 — Automation Engine (ADR-021)
+# ---------------------------------------------------------------------------
 
 

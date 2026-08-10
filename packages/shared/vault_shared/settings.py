@@ -70,6 +70,19 @@ class Settings(BaseSettings):
     connector_encryption_key: str = ""
 
     ai_gateway_key: str = ""
+    # Phase 8 — Execution Engine (ADR-020). `execution_max_retries`/
+    # `execution_timeout_seconds` are read by the Celery task's retry
+    # policy (worker.execution.run), the same shape as the scanner/
+    # enrichment retry config; `approval_expiry_hours` is how long an
+    # `ApprovalRequest` stays actionable before `ApprovalRequestRepository.
+    # expire_if_overdue` marks it `EXPIRED`; `execution_rollback_enabled`
+    # is a kill switch a founder can flip without a deploy if rollback
+    # itself ever needs to be disabled.
+    execution_max_retries: int = 3
+    execution_timeout_seconds: int = 300
+    approval_expiry_hours: int = 72
+    execution_rollback_enabled: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
