@@ -5,10 +5,12 @@ from app.application.auth_service import AuthService
 from app.application.connector_service import ConnectorService
 from app.application.context_builder_service import ContextBuilderService
 from app.application.conversation_service import ConversationService
+from app.application.dashboard_service import DashboardService
 from app.application.embedding_job_service import EmbeddingJobService
 from app.application.enrichment_job_service import EnrichmentJobService
 from app.application.file_service import FileService
 from app.application.organization_service import OrganizationService
+from app.application.recommendation_service import RecommendationService
 from app.application.scan_service import ScanService
 from app.application.search_service import SearchService
 from vault_shared.ai_gateway import AIGateway, get_ai_gateway
@@ -64,3 +66,11 @@ def get_conversation_service(
     db: Session = Depends(get_db), ai_gateway: AIGateway = Depends(get_ai_gateway)
 ) -> ConversationService:
     return ConversationService(db, ai_gateway=ai_gateway)
+
+
+def get_dashboard_service(db: Session = Depends(get_db)) -> DashboardService:
+    return DashboardService(db)
+
+
+def get_recommendation_service(db: Session = Depends(get_db)) -> RecommendationService:
+    return RecommendationService(db)
