@@ -1,0 +1,26 @@
+# Prometheus scrape config (Phase 10, ADR-022). Local dev target names
+# match docker-compose.monitoring.yml's service names; production points
+# these at the real ALB-internal/service-discovery addresses instead (see
+# Docs/17_MONITORING_GUIDE.md).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: vault-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8000"]
+        labels:
+          service: backend
+
+  # Served by `python -m worker.metrics_server` (apps/worker/worker/
+  # metrics_server.py) — a separate process from the Celery workers
+  # themselves, merging every worker child's PROMETHEUS_MULTIPROC_DIR
+  # files on each scrape. See that module's docstring for why this can't
+  # just be a route inside the worker process the way the backend's is.
+  - job_name: vault-worker
+    static_configs:
+      - targets: ["worker-metrics:9101"]
+        labels:
+          service: worker

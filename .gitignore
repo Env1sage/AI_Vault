@@ -43,3 +43,19 @@ Thumbs.db
 # Local overrides
 *.local
 
+
+# Backups (Phase 10) — local drill output only, never committed; a real
+# backup's durable copy lives in object storage (see
+# infrastructure/terraform/modules/storage), never in git.
+infrastructure/backups/
+
+# Terraform (Phase 10) — .terraform.lock.hcl under environments/* IS
+# committed (reproducible provider versions); everything else here is a
+# local working-directory artifact or contains real secrets in plaintext.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infrastructure/terraform/modules/*/.terraform.lock.hcl
+infrastructure/terraform/**/terraform.tfvars
+!infrastructure/terraform/**/terraform.tfvars.example

@@ -1,0 +1,73 @@
+{
+  "title": "AI Project Vault — Worker & Automation Overview",
+  "uid": "vault-worker-automation-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "utc",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "tags": ["vault", "worker", "automation"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Celery task rate (by task, success vs failure)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (task_name, status) (rate(vault_celery_tasks_total[5m]))",
+          "legendFormat": "{{task_name}} — {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Celery task duration (p95, by task)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (task_name, le) (rate(vault_celery_task_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{task_name}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Redis broker queue depth",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "vault_queue_depth",
+          "legendFormat": "{{queue_name}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Workflow executions (by terminal status) — Phase 9",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(vault_workflow_executions_total[1h]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "AI Gateway provider latency (p95, by operation)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (provider, operation, le) (rate(vault_ai_provider_latency_seconds_bucket[15m])))",
+          "legendFormat": "{{provider}} — {{operation}}"
+        }
+      ]
+    }
+  ]
+}

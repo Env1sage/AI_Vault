@@ -1,0 +1,12 @@
+packages:
+  - "apps/frontend"
+  - "packages/types"
+  - "packages/ui"
+  - "packages/config"
+
+# Phase 10 (ADR-022) — forces a patched transitive version regardless of
+# what eslint's own dependency tree requests (pnpm audit found
+# GHSA-rgw5-rvv9-x895 via eslint > minimatch > brace-expansion, a dev-only
+# dependency chain, not anything the shipped frontend bundle includes).
+overrides:
+  brace-expansion@>=4.0.0 <5.0.9: ">=5.0.9"
