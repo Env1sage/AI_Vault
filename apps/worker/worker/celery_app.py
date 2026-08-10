@@ -14,6 +14,7 @@ celery_app = Celery(
         "worker.tasks.scan",
         "worker.tasks.enrichment",
         "worker.tasks.embedding",
+        "worker.tasks.recommendation",
     ],
 )
 

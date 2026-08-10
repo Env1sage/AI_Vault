@@ -3,12 +3,14 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.application.conversation_service import AssistantTurn, ConversationDetail
+from app.application.dashboard_service import DashboardOverview
 from app.application.file_service import FileDetail
 from app.application.search_service import SearchResult
 from vault_shared.db.models import (
     Citation,
     Conversation,
     ConversationMessage,
+    DashboardSnapshot,
     EmbeddingJob,
     EmbeddingProgress,
     EnrichmentJob,
@@ -17,8 +19,11 @@ from vault_shared.db.models import (
     FileClassification,
     FileExtraction,
     FileMetadata,
+    InsightRecord,
     KnowledgeAttribute,
     Organization,
+    Recommendation,
+    RecommendationJob,
     ScanJob,
     ScanProgress,
     StorageConnector,
@@ -566,6 +571,171 @@ class AskResponse(BaseModel):
             assistant_message=ConversationMessageResponse.from_model(
                 turn.assistant_message, citations=turn.citations
             ),
+        )
+
+
+class DashboardSnapshotResponse(BaseModel):
+    connected_providers: int
+    total_files: int
+    total_folders: int
+    total_storage_bytes: int
+    classified_files: int
+    unclassified_files: int
+    pending_enrichment_files: int
+    embedded_files: int
+    relationship_count: int
+    active_recommendations: int
+    knowledge_completeness_score: float
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, snapshot: DashboardSnapshot) -> "DashboardSnapshotResponse":
+        return cls(
+            connected_providers=snapshot.connected_providers,
+            total_files=snapshot.total_files,
+            total_folders=snapshot.total_folders,
+            total_storage_bytes=snapshot.total_storage_bytes,
+            classified_files=snapshot.classified_files,
+            unclassified_files=snapshot.unclassified_files,
+            pending_enrichment_files=snapshot.pending_enrichment_files,
+            embedded_files=snapshot.embedded_files,
+            relationship_count=snapshot.relationship_count,
+            active_recommendations=snapshot.active_recommendations,
+            knowledge_completeness_score=snapshot.knowledge_completeness_score,
+            created_at=snapshot.created_at,
+        )
+
+
+class InsightRecordResponse(BaseModel):
+    id: str
+    insight_type: str
+    title: str
+    description: str
+    confidence: float
+    related_file_ids: list[str]
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, insight: InsightRecord) -> "InsightRecordResponse":
+        return cls(
+            id=str(insight.id),
+            insight_type=insight.insight_type,
+            title=insight.title,
+            description=insight.description,
+            confidence=insight.confidence,
+            related_file_ids=insight.related_file_ids,
+            created_at=insight.created_at,
+        )
+
+
+class DashboardResponse(BaseModel):
+    connector_count: int
+    latest_snapshot: DashboardSnapshotResponse | None
+    snapshot_history: list[DashboardSnapshotResponse]
+    recent_insights: list[InsightRecordResponse]
+    recent_activity: list[FileSummaryResponse]
+    latest_scan_status: str | None
+    latest_enrichment_status: str | None
+    latest_embedding_status: str | None
+    latest_recommendation_status: str | None
+
+    @classmethod
+    def from_overview(cls, overview: DashboardOverview) -> "DashboardResponse":
+        return cls(
+            connector_count=len(overview.connectors),
+            latest_snapshot=(
+                DashboardSnapshotResponse.from_model(overview.latest_snapshot)
+                if overview.latest_snapshot
+                else None
+            ),
+            snapshot_history=[
+                DashboardSnapshotResponse.from_model(snapshot)
+                for snapshot in overview.snapshot_history
+            ],
+            recent_insights=[
+                InsightRecordResponse.from_model(insight) for insight in overview.recent_insights
+            ],
+            recent_activity=[
+                FileSummaryResponse.from_model(file) for file in overview.recent_activity
+            ],
+            latest_scan_status=overview.latest_scan_status,
+            latest_enrichment_status=overview.latest_enrichment_status,
+            latest_embedding_status=overview.latest_embedding_status,
+            latest_recommendation_status=overview.latest_recommendation_status,
+        )
+
+
+class RecommendationResponse(BaseModel):
+    id: str
+    category: str
+    rule_name: str
+    title: str
+    description: str
+    confidence: float
+    estimated_impact: str
+    impact_value: float | None
+    risk_level: str
+    suggested_action: str
+    requires_approval: bool
+    related_departments: list[str]
+    affected_file_ids: list[str]
+    status: str
+    priority_score: float
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: datetime | None
+
+    @classmethod
+    def from_model(cls, recommendation: Recommendation) -> "RecommendationResponse":
+        return cls(
+            id=str(recommendation.id),
+            category=recommendation.category,
+            rule_name=recommendation.rule_name,
+            title=recommendation.title,
+            description=recommendation.description,
+            confidence=recommendation.confidence,
+            estimated_impact=recommendation.estimated_impact,
+            impact_value=recommendation.impact_value,
+            risk_level=recommendation.risk_level,
+            suggested_action=recommendation.suggested_action,
+            requires_approval=recommendation.requires_approval,
+            related_departments=recommendation.related_departments,
+            affected_file_ids=recommendation.affected_file_ids,
+            status=recommendation.status,
+            priority_score=recommendation.priority_score,
+            created_at=recommendation.created_at,
+            updated_at=recommendation.updated_at,
+            resolved_at=recommendation.resolved_at,
+        )
+
+
+class RecommendationListResponse(BaseModel):
+    items: list[RecommendationResponse]
+
+
+class RecommendationJobResponse(BaseModel):
+    id: str
+    organization_id: str
+    triggered_by: str
+    status: str
+    error: str | None
+    recommendations_active: int | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, job: RecommendationJob) -> "RecommendationJobResponse":
+        return cls(
+            id=str(job.id),
+            organization_id=str(job.organization_id),
+            triggered_by=job.triggered_by,
+            status=job.status,
+            error=job.error,
+            recommendations_active=job.recommendations_active,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            created_at=job.created_at,
         )
 
 

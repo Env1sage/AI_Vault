@@ -3,6 +3,7 @@ from vault_shared.db.models.citation import Citation
 from vault_shared.db.models.connector_credentials import ConnectorCredentials
 from vault_shared.db.models.conversation import Conversation
 from vault_shared.db.models.conversation_message import ConversationMessage, MessageRole
+from vault_shared.db.models.dashboard_snapshot import DashboardSnapshot
 from vault_shared.db.models.embedding import Embedding
 from vault_shared.db.models.embedding_event import EmbeddingEvent
 from vault_shared.db.models.embedding_job import (
@@ -24,8 +25,21 @@ from vault_shared.db.models.file_extraction import ExtractionStatus, FileExtract
 from vault_shared.db.models.file_metadata import FileMetadata
 from vault_shared.db.models.file_relationship import FileRelationship, RelationshipType
 from vault_shared.db.models.folder import Folder
+from vault_shared.db.models.insight_record import InsightRecord
 from vault_shared.db.models.knowledge_attribute import KnowledgeAttribute
 from vault_shared.db.models.organization import Organization
+from vault_shared.db.models.recommendation import (
+    Recommendation,
+    RecommendationCategory,
+    RecommendationRiskLevel,
+    RecommendationStatus,
+)
+from vault_shared.db.models.recommendation_event import RecommendationEvent
+from vault_shared.db.models.recommendation_job import (
+    RecommendationJob,
+    RecommendationJobStatus,
+    RecommendationTrigger,
+)
 from vault_shared.db.models.refresh_token import RefreshToken
 from vault_shared.db.models.role import Role, RoleName
 from vault_shared.db.models.scan_event import ScanEvent
@@ -48,6 +62,7 @@ __all__ = [
     "ConnectorStatus",
     "Conversation",
     "ConversationMessage",
+    "DashboardSnapshot",
     "DriveType",
     "Embedding",
     "EmbeddingEvent",
@@ -67,9 +82,18 @@ __all__ = [
     "FileMetadata",
     "FileRelationship",
     "Folder",
+    "InsightRecord",
     "KnowledgeAttribute",
     "MessageRole",
     "Organization",
+    "Recommendation",
+    "RecommendationCategory",
+    "RecommendationEvent",
+    "RecommendationJob",
+    "RecommendationJobStatus",
+    "RecommendationRiskLevel",
+    "RecommendationStatus",
+    "RecommendationTrigger",
     "RefreshToken",
     "RelationshipType",
     "Role",
