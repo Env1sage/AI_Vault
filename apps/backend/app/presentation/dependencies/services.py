@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.application.approval_service import ApprovalService
 from app.application.auth_service import AuthService
+from app.application.automation_template_service import AutomationTemplateService
 from app.application.connector_service import ConnectorService
 from app.application.context_builder_service import ContextBuilderService
 from app.application.conversation_service import ConversationService
@@ -12,10 +13,15 @@ from app.application.enrichment_job_service import EnrichmentJobService
 from app.application.execution_job_service import ExecutionJobService
 from app.application.execution_plan_service import ExecutionPlanService
 from app.application.file_service import FileService
+from app.application.notification_service import NotificationService
 from app.application.organization_service import OrganizationService
 from app.application.recommendation_service import RecommendationService
 from app.application.scan_service import ScanService
 from app.application.search_service import SearchService
+from app.application.workflow_execution_service import WorkflowExecutionService
+from app.application.workflow_policy_service import WorkflowPolicyService
+from app.application.workflow_service import WorkflowService
+from app.application.workflow_trigger_service import WorkflowTriggerService
 from vault_shared.ai_gateway import AIGateway, get_ai_gateway
 from vault_shared.connectors.google_workspace import (
     GoogleWorkspaceOAuthClient,
@@ -89,3 +95,28 @@ def get_approval_service(db: Session = Depends(get_db)) -> ApprovalService:
 
 def get_execution_job_service(db: Session = Depends(get_db)) -> ExecutionJobService:
     return ExecutionJobService(db)
+
+
+def get_workflow_service(db: Session = Depends(get_db)) -> WorkflowService:
+    return WorkflowService(db)
+
+
+def get_workflow_trigger_service(db: Session = Depends(get_db)) -> WorkflowTriggerService:
+    return WorkflowTriggerService(db)
+
+
+def get_workflow_policy_service(db: Session = Depends(get_db)) -> WorkflowPolicyService:
+    return WorkflowPolicyService(db)
+
+
+def get_workflow_execution_service(db: Session = Depends(get_db)) -> WorkflowExecutionService:
+    return WorkflowExecutionService(db)
+
+
+def get_notification_service(db: Session = Depends(get_db)) -> NotificationService:
+    return NotificationService(db)
+
+
+def get_automation_template_service(db: Session = Depends(get_db)) -> AutomationTemplateService:
+    return AutomationTemplateService(db)
+

@@ -8,8 +8,11 @@ from app.application.execution_job_service import ExecutionJobDetail
 from app.application.execution_plan_service import ExecutionPlanDetail
 from app.application.file_service import FileDetail
 from app.application.search_service import SearchResult
+from app.application.workflow_execution_service import WorkflowExecutionDetail
+from app.application.workflow_service import WorkflowDetail
 from vault_shared.db.models import (
     ApprovalRequest,
+    AutomationTemplate,
     Citation,
     Conversation,
     ConversationMessage,
@@ -28,6 +31,7 @@ from vault_shared.db.models import (
     FileMetadata,
     InsightRecord,
     KnowledgeAttribute,
+    Notification,
     Organization,
     Recommendation,
     RecommendationJob,
@@ -35,6 +39,13 @@ from vault_shared.db.models import (
     ScanProgress,
     StorageConnector,
     User,
+    Workflow,
+    WorkflowExecution,
+    WorkflowNode,
+    WorkflowNodeExecution,
+    WorkflowPolicy,
+    WorkflowTrigger,
+    WorkflowVersion,
 )
 
 
@@ -914,3 +925,300 @@ class ExecutionJobDetailResponse(ExecutionJobResponse):
 # ---------------------------------------------------------------------------
 
 
+class WorkflowResponse(BaseModel):
+    id: str
+    organization_id: str
+    created_by_user_id: str
+    name: str
+    description: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, workflow: Workflow) -> "WorkflowResponse":
+        return cls(
+            id=str(workflow.id),
+            organization_id=str(workflow.organization_id),
+            created_by_user_id=str(workflow.created_by_user_id),
+            name=workflow.name,
+            description=workflow.description,
+            status=workflow.status,
+            created_at=workflow.created_at,
+            updated_at=workflow.updated_at,
+        )
+
+
+class WorkflowVersionResponse(BaseModel):
+    id: str
+    workflow_id: str
+    version_number: int
+    status: str
+    published_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, version: WorkflowVersion) -> "WorkflowVersionResponse":
+        return cls(
+            id=str(version.id),
+            workflow_id=str(version.workflow_id),
+            version_number=version.version_number,
+            status=version.status,
+            published_at=version.published_at,
+            created_at=version.created_at,
+        )
+
+
+class WorkflowNodeResponse(BaseModel):
+    id: str
+    node_type: str
+    name: str
+    config: dict
+    next_nodes: dict
+    position_x: int
+    position_y: int
+
+    @classmethod
+    def from_model(cls, node: WorkflowNode) -> "WorkflowNodeResponse":
+        return cls(
+            id=str(node.id),
+            node_type=node.node_type,
+            name=node.name,
+            config=node.config,
+            next_nodes=node.next_nodes,
+            position_x=node.position_x,
+            position_y=node.position_y,
+        )
+
+
+class WorkflowDetailResponse(WorkflowResponse):
+    published_version: WorkflowVersionResponse | None
+    draft_version: WorkflowVersionResponse | None
+
+    @classmethod
+    def from_detail(cls, detail: WorkflowDetail) -> "WorkflowDetailResponse":
+        base = WorkflowResponse.from_model(detail.workflow)
+        return cls(
+            **base.model_dump(),
+            published_version=(
+                WorkflowVersionResponse.from_model(detail.published_version)
+                if detail.published_version
+                else None
+            ),
+            draft_version=(
+                WorkflowVersionResponse.from_model(detail.draft_version)
+                if detail.draft_version
+                else None
+            ),
+        )
+
+
+class CreateWorkflowRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=4096)
+
+
+class SetWorkflowStatusRequest(BaseModel):
+    status: str = Field(pattern="^(active|paused|disabled)$")
+
+
+class WorkflowNodeInput(BaseModel):
+    key: str = Field(min_length=1, max_length=100)
+    node_type: str
+    name: str = Field(min_length=1, max_length=255)
+    config: dict = Field(default_factory=dict)
+    next_nodes: dict[str, str] = Field(default_factory=dict)
+    position_x: int = 0
+    position_y: int = 0
+
+
+class ReplaceWorkflowNodesRequest(BaseModel):
+    nodes: list[WorkflowNodeInput] = Field(min_length=1, max_length=200)
+
+
+class WorkflowDraftResponse(BaseModel):
+    version: WorkflowVersionResponse
+    nodes: list[WorkflowNodeResponse]
+
+
+class WorkflowTriggerResponse(BaseModel):
+    id: str
+    workflow_id: str
+    trigger_type: str
+    config: dict
+    enabled: bool
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, trigger: WorkflowTrigger) -> "WorkflowTriggerResponse":
+        return cls(
+            id=str(trigger.id),
+            workflow_id=str(trigger.workflow_id),
+            trigger_type=trigger.trigger_type,
+            config=trigger.config,
+            enabled=trigger.enabled,
+            created_at=trigger.created_at,
+        )
+
+
+class CreateWorkflowTriggerRequest(BaseModel):
+    trigger_type: str = Field(pattern="^(scheduled|event|manual)$")
+    config: dict = Field(default_factory=dict)
+
+
+class SetWorkflowTriggerEnabledRequest(BaseModel):
+    enabled: bool
+
+
+class WorkflowNodeExecutionResponse(BaseModel):
+    id: str
+    workflow_node_id: str
+    status: str
+    output_context: dict
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+
+    @classmethod
+    def from_model(cls, node_execution: WorkflowNodeExecution) -> "WorkflowNodeExecutionResponse":
+        return cls(
+            id=str(node_execution.id),
+            workflow_node_id=str(node_execution.workflow_node_id),
+            status=node_execution.status,
+            output_context=node_execution.output_context,
+            error=node_execution.error,
+            started_at=node_execution.started_at,
+            completed_at=node_execution.completed_at,
+        )
+
+
+class WorkflowExecutionResponse(BaseModel):
+    id: str
+    workflow_id: str
+    workflow_version_id: str
+    organization_id: str
+    status: str
+    trigger_type: str
+    current_node_id: str | None
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, execution: WorkflowExecution) -> "WorkflowExecutionResponse":
+        return cls(
+            id=str(execution.id),
+            workflow_id=str(execution.workflow_id),
+            workflow_version_id=str(execution.workflow_version_id),
+            organization_id=str(execution.organization_id),
+            status=execution.status,
+            trigger_type=execution.trigger_type,
+            current_node_id=str(execution.current_node_id) if execution.current_node_id else None,
+            error=execution.error,
+            started_at=execution.started_at,
+            completed_at=execution.completed_at,
+            created_at=execution.created_at,
+        )
+
+
+class WorkflowExecutionDetailResponse(WorkflowExecutionResponse):
+    node_executions: list[WorkflowNodeExecutionResponse]
+
+    @classmethod
+    def from_detail(cls, detail: WorkflowExecutionDetail) -> "WorkflowExecutionDetailResponse":
+        base = WorkflowExecutionResponse.from_model(detail.execution)
+        return cls(
+            **base.model_dump(),
+            node_executions=[
+                WorkflowNodeExecutionResponse.from_model(ne) for ne in detail.node_executions
+            ],
+        )
+
+
+class WorkflowPolicyResponse(BaseModel):
+    id: str
+    organization_id: str
+    policy_key: str
+    version: int
+    name: str
+    description: str | None
+    status: str
+    effect: str
+    conditions: dict
+    published_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, policy: WorkflowPolicy) -> "WorkflowPolicyResponse":
+        return cls(
+            id=str(policy.id),
+            organization_id=str(policy.organization_id),
+            policy_key=policy.policy_key,
+            version=policy.version,
+            name=policy.name,
+            description=policy.description,
+            status=policy.status,
+            effect=policy.effect,
+            conditions=policy.conditions,
+            published_at=policy.published_at,
+            created_at=policy.created_at,
+        )
+
+
+class CreateWorkflowPolicyRequest(BaseModel):
+    policy_key: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=4096)
+    effect: str = Field(pattern="^(auto_execute|require_approval|skip)$")
+    conditions: dict = Field(default_factory=dict)
+
+
+class NotificationResponse(BaseModel):
+    id: str
+    workflow_execution_id: str | None
+    channel: str
+    subject: str
+    body: str
+    status: str
+    sent_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, notification: Notification) -> "NotificationResponse":
+        return cls(
+            id=str(notification.id),
+            workflow_execution_id=(
+                str(notification.workflow_execution_id)
+                if notification.workflow_execution_id
+                else None
+            ),
+            channel=notification.channel,
+            subject=notification.subject,
+            body=notification.body,
+            status=notification.status,
+            sent_at=notification.sent_at,
+            created_at=notification.created_at,
+        )
+
+
+class AutomationTemplateResponse(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    category: str
+    node_definitions: list
+
+    @classmethod
+    def from_model(cls, template: AutomationTemplate) -> "AutomationTemplateResponse":
+        return cls(
+            id=str(template.id),
+            name=template.name,
+            description=template.description,
+            category=template.category,
+            node_definitions=template.node_definitions,
+        )
+
+
+class ApplyAutomationTemplateRequest(BaseModel):
+    workflow_name: str | None = Field(default=None, max_length=255)

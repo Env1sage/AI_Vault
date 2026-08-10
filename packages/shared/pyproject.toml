@@ -7,7 +7,8 @@ dependencies = [
     "pydantic-settings>=2.4,<3",
     "sqlalchemy>=2.0,<3",
     "psycopg[binary]>=3.2,<4",
-    "cryptography>=43,<50",
+    # Phase 10 (ADR-022) bumped the floor to 50.0.0 to clear CVE-2026-69247.
+    "cryptography>=50,<51",
     "requests>=2.32,<3",
     # AI Gateway (Phase 6, Handbook §8.14) — local, free, offline embedding
     # provider (ADR-018). Lives here, not in a per-app requirements.txt,
@@ -23,6 +24,16 @@ dependencies = [
     # workflow triggers (ADR-021). Pure Python, no wheel-compatibility
     # concerns like the transformer libraries ADR-018 ruled out.
     "croniter>=2.0,<7",
+    # Observability (Phase 10, ADR-022). `prometheus-client`/OTel
+    # tracing/Sentry live here (not per-app) because both apps emit the
+    # same metric names and both need `configure_tracing`/`configure_sentry`
+    # — the app-specific instrumentation packages (FastAPI/SQLAlchemy/Celery
+    # auto-instrumentors) stay in each app's own requirements.txt.
+    "prometheus-client>=0.20,<1",
+    "opentelemetry-api>=1.27,<2",
+    "opentelemetry-sdk>=1.27,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.27,<2",
+    "sentry-sdk[fastapi,celery]>=2.0,<3",
 ]
 
 [project.optional-dependencies]

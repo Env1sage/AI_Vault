@@ -6,6 +6,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 _request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)
+# Phase 10 (ADR-022) — distinct from request_id: a Celery task_id is always
+# present in the worker (there's no originating HTTP request for a
+# scheduler-fired or chained task), while request_id/correlation_id is only
+# present when the task traces back to a real backend HTTP request.
+_task_id_ctx: ContextVar[str | None] = ContextVar("task_id", default=None)
 
 _RESERVED_LOG_RECORD_ATTRS = frozenset(logging.LogRecord(
     "", 0, "", 0, "", (), None,
@@ -18,6 +23,14 @@ def set_request_id(request_id: str | None) -> None:
 
 def get_request_id() -> str | None:
     return _request_id_ctx.get()
+
+
+def set_task_id(task_id: str | None) -> None:
+    _task_id_ctx.set(task_id)
+
+
+def get_task_id() -> str | None:
+    return _task_id_ctx.get()
 
 
 class JSONFormatter(logging.Formatter):
@@ -35,6 +48,10 @@ class JSONFormatter(logging.Formatter):
         request_id = get_request_id()
         if request_id:
             payload["request_id"] = request_id
+
+        task_id = get_task_id()
+        if task_id:
+            payload["task_id"] = task_id
 
         for key, value in record.__dict__.items():
             if key not in _RESERVED_LOG_RECORD_ATTRS and key not in payload:

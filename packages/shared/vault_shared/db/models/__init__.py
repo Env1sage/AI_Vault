@@ -1,6 +1,7 @@
 from vault_shared.db.models.approval_decision import ApprovalDecision, ApprovalDecisionType
 from vault_shared.db.models.approval_request import ApprovalRequest, ApprovalStatus
 from vault_shared.db.models.audit_log import AuditLog
+from vault_shared.db.models.automation_template import AutomationTemplate
 from vault_shared.db.models.citation import Citation
 from vault_shared.db.models.connector_credentials import ConnectorCredentials
 from vault_shared.db.models.conversation import Conversation
@@ -42,6 +43,11 @@ from vault_shared.db.models.file_relationship import FileRelationship, Relations
 from vault_shared.db.models.folder import Folder
 from vault_shared.db.models.insight_record import InsightRecord
 from vault_shared.db.models.knowledge_attribute import KnowledgeAttribute
+from vault_shared.db.models.notification import (
+    Notification,
+    NotificationChannel,
+    NotificationStatus,
+)
 from vault_shared.db.models.organization import Organization
 from vault_shared.db.models.recommendation import (
     Recommendation,
@@ -61,6 +67,7 @@ from vault_shared.db.models.rollback_record import RollbackRecord
 from vault_shared.db.models.scan_event import ScanEvent
 from vault_shared.db.models.scan_job import ScanJob, ScanStatus, ScanType
 from vault_shared.db.models.scan_progress import ScanProgress
+from vault_shared.db.models.scheduler_job import SchedulerJob
 from vault_shared.db.models.search_session import SearchSession
 from vault_shared.db.models.storage_connector import (
     ConnectorProvider,
@@ -69,6 +76,24 @@ from vault_shared.db.models.storage_connector import (
 )
 from vault_shared.db.models.storage_source import DriveType, StorageSource
 from vault_shared.db.models.user import User
+from vault_shared.db.models.workflow import Workflow, WorkflowStatus
+from vault_shared.db.models.workflow_execution import WorkflowExecution, WorkflowExecutionStatus
+from vault_shared.db.models.workflow_node import WorkflowNode, WorkflowNodeType
+from vault_shared.db.models.workflow_node_execution import (
+    WorkflowNodeExecution,
+    WorkflowNodeExecutionStatus,
+)
+from vault_shared.db.models.workflow_policy import (
+    WorkflowPolicy,
+    WorkflowPolicyEffect,
+    WorkflowPolicyStatus,
+)
+from vault_shared.db.models.workflow_trigger import (
+    WorkflowEventType,
+    WorkflowTrigger,
+    WorkflowTriggerType,
+)
+from vault_shared.db.models.workflow_version import WorkflowVersion, WorkflowVersionStatus
 
 __all__ = [
     "ApprovalDecision",
@@ -76,6 +101,7 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalStatus",
     "AuditLog",
+    "AutomationTemplate",
     "Citation",
     "ConnectorCredentials",
     "ConnectorProvider",
@@ -115,6 +141,9 @@ __all__ = [
     "InsightRecord",
     "KnowledgeAttribute",
     "MessageRole",
+    "Notification",
+    "NotificationChannel",
+    "NotificationStatus",
     "Organization",
     "Recommendation",
     "RecommendationCategory",
@@ -134,9 +163,26 @@ __all__ = [
     "ScanProgress",
     "ScanStatus",
     "ScanType",
+    "SchedulerJob",
     "SearchSession",
     "StorageConnector",
     "StorageSource",
     "User",
     "VerificationStatus",
+    "Workflow",
+    "WorkflowEventType",
+    "WorkflowExecution",
+    "WorkflowExecutionStatus",
+    "WorkflowNode",
+    "WorkflowNodeExecution",
+    "WorkflowNodeExecutionStatus",
+    "WorkflowNodeType",
+    "WorkflowPolicy",
+    "WorkflowPolicyEffect",
+    "WorkflowPolicyStatus",
+    "WorkflowStatus",
+    "WorkflowTrigger",
+    "WorkflowTriggerType",
+    "WorkflowVersion",
+    "WorkflowVersionStatus",
 ]

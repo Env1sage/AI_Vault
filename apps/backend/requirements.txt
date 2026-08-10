@@ -10,5 +10,14 @@ python-multipart>=0.0.9,<1
 pyjwt>=2.9,<3
 google-auth>=2.34,<3
 requests>=2.32,<3
-cryptography>=43,<50
+# Phase 10 (ADR-022) bumped the floor to 50.0.0 to clear CVE-2026-69247
+# (a PKCS7 decrypt timing/error oracle) that pip-audit found against 49.0.0 —
+# not reachable through this codebase's Fernet-only usage, but fixed anyway.
+cryptography>=50,<51
 celery[redis]>=5.4,<6
+
+# Observability (Phase 10, ADR-022) — auto-instruments every FastAPI route
+# and SQLAlchemy query with a span, a no-op until vault_shared's
+# configure_tracing() actually installs an exporter.
+opentelemetry-instrumentation-fastapi>=0.48b0,<1
+opentelemetry-instrumentation-sqlalchemy>=0.48b0,<1

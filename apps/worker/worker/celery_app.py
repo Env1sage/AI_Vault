@@ -1,9 +1,21 @@
 from celery import Celery
 from celery.signals import setup_logging
+from opentelemetry.instrumentation.celery import CeleryInstrumentor
 
 from vault_shared import configure_logging, get_settings
+from vault_shared.error_tracking import configure_sentry
+from vault_shared.tracing import configure_tracing
 
 settings = get_settings()
+
+# Phase 10 (ADR-022) — both are no-ops without SENTRY_DSN/
+# OTEL_EXPORTER_OTLP_ENDPOINT set, mirroring the backend's
+# app/core/observability.py. CeleryInstrumentor wraps every task
+# execution with a span regardless — a no-op span if tracing isn't
+# actually configured.
+configure_sentry(settings.service_name, app_kind="celery")
+configure_tracing(settings.service_name)
+CeleryInstrumentor().instrument()
 
 celery_app = Celery(
     "vault_worker",
@@ -53,3 +65,10 @@ def _configure_worker_logging(**_: object) -> None:
     # Takes over Celery's own logging setup so every worker log line is the
     # same structured JSON format the backend emits (Handbook §26).
     configure_logging(settings.service_name, settings.log_level)
+
+
+# Side-effect import — registers the task_prerun/task_postrun metric
+# handlers in worker/observability.py. Must happen after celery_app exists
+# (the signal decorators don't need it directly, but this keeps import
+# order obviously tied to "this app's Celery instance is now configured").
+import worker.observability  # noqa: E402,F401

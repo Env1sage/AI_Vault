@@ -4,7 +4,14 @@ celery[redis]>=5.4,<6
 
 # Content Extraction Framework (Phase 5) — deterministic text extraction
 # only, no AI/ML. Worker-only: the backend never extracts file content.
-pypdf>=5.0,<6
+# Phase 10 (ADR-022) bumped the floor to 6.14.2 to clear a long run of CVEs
+# pip-audit found against 5.9.0 — see the Release Readiness Report.
+pypdf>=6.14.2,<7
 python-docx>=1.1,<2
 openpyxl>=3.1,<4
 python-pptx>=1.0,<2
+
+# Observability (Phase 10, ADR-022) — auto-instruments every Celery task
+# with a span, a no-op until vault_shared's configure_tracing() actually
+# installs an exporter.
+opentelemetry-instrumentation-celery>=0.48b0,<1

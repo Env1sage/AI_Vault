@@ -3,6 +3,9 @@ from vault_shared.db.repositories.approval_decision_repository import (
 )
 from vault_shared.db.repositories.approval_request_repository import ApprovalRequestRepository
 from vault_shared.db.repositories.audit_log_repository import AuditLogRepository
+from vault_shared.db.repositories.automation_template_repository import (
+    AutomationTemplateRepository,
+)
 from vault_shared.db.repositories.citation_repository import CitationRepository
 from vault_shared.db.repositories.connector_credentials_repository import (
     ConnectorCredentialsRepository,
@@ -42,6 +45,7 @@ from vault_shared.db.repositories.insight_record_repository import InsightRecord
 from vault_shared.db.repositories.knowledge_attribute_repository import (
     KnowledgeAttributeRepository,
 )
+from vault_shared.db.repositories.notification_repository import NotificationRepository
 from vault_shared.db.repositories.organization_repository import OrganizationRepository
 from vault_shared.db.repositories.recommendation_event_repository import (
     RecommendationEventRepository,
@@ -56,17 +60,30 @@ from vault_shared.db.repositories.rollback_record_repository import RollbackReco
 from vault_shared.db.repositories.scan_event_repository import ScanEventRepository
 from vault_shared.db.repositories.scan_job_repository import ScanJobRepository
 from vault_shared.db.repositories.scan_progress_repository import ScanProgressRepository
+from vault_shared.db.repositories.scheduler_job_repository import SchedulerJobRepository
 from vault_shared.db.repositories.search_session_repository import SearchSessionRepository
 from vault_shared.db.repositories.storage_connector_repository import (
     StorageConnectorRepository,
 )
 from vault_shared.db.repositories.storage_source_repository import StorageSourceRepository
 from vault_shared.db.repositories.user_repository import UserRepository
+from vault_shared.db.repositories.workflow_execution_repository import (
+    WorkflowExecutionRepository,
+)
+from vault_shared.db.repositories.workflow_node_execution_repository import (
+    WorkflowNodeExecutionRepository,
+)
+from vault_shared.db.repositories.workflow_node_repository import WorkflowNodeRepository
+from vault_shared.db.repositories.workflow_policy_repository import WorkflowPolicyRepository
+from vault_shared.db.repositories.workflow_repository import WorkflowRepository
+from vault_shared.db.repositories.workflow_trigger_repository import WorkflowTriggerRepository
+from vault_shared.db.repositories.workflow_version_repository import WorkflowVersionRepository
 
 __all__ = [
     "ApprovalDecisionRepository",
     "ApprovalRequestRepository",
     "AuditLogRepository",
+    "AutomationTemplateRepository",
     "CitationRepository",
     "ConnectorCredentialsRepository",
     "ConversationMessageRepository",
@@ -92,6 +109,7 @@ __all__ = [
     "FolderRepository",
     "InsightRecordRepository",
     "KnowledgeAttributeRepository",
+    "NotificationRepository",
     "OrganizationRepository",
     "RecommendationEventRepository",
     "RecommendationJobRepository",
@@ -102,8 +120,16 @@ __all__ = [
     "ScanEventRepository",
     "ScanJobRepository",
     "ScanProgressRepository",
+    "SchedulerJobRepository",
     "SearchSessionRepository",
     "StorageConnectorRepository",
     "StorageSourceRepository",
     "UserRepository",
+    "WorkflowExecutionRepository",
+    "WorkflowNodeExecutionRepository",
+    "WorkflowNodeRepository",
+    "WorkflowPolicyRepository",
+    "WorkflowRepository",
+    "WorkflowTriggerRepository",
+    "WorkflowVersionRepository",
 ]
