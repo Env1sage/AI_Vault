@@ -3,7 +3,10 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from vault_shared.db.models import (
+    File,
     Organization,
+    ScanJob,
+    ScanProgress,
     StorageConnector,
     User,
 )
@@ -105,5 +108,55 @@ class InitiateConnectResponse(BaseModel):
 class CompleteConnectRequest(BaseModel):
     code: str = Field(min_length=1)
     state: str = Field(min_length=1)
+
+
+class ScanProgressResponse(BaseModel):
+    sources_discovered: int
+    sources_completed: int
+    folders_discovered: int
+    files_discovered: int
+    current_source_name: str | None
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, progress: ScanProgress) -> "ScanProgressResponse":
+        return cls(
+            sources_discovered=progress.sources_discovered,
+            sources_completed=progress.sources_completed,
+            folders_discovered=progress.folders_discovered,
+            files_discovered=progress.files_discovered,
+            current_source_name=progress.current_source_name,
+            updated_at=progress.updated_at,
+        )
+
+
+class ScanJobResponse(BaseModel):
+    id: str
+    connector_id: str
+    scan_type: str
+    status: str
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    progress: ScanProgressResponse | None = None
+
+    @classmethod
+    def from_model(cls, job: ScanJob, *, progress: ScanProgress | None = None) -> "ScanJobResponse":
+        return cls(
+            id=str(job.id),
+            connector_id=str(job.connector_id),
+            scan_type=job.scan_type,
+            status=job.status,
+            error=job.error,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            created_at=job.created_at,
+            progress=ScanProgressResponse.from_model(progress) if progress else None,
+        )
+
+
+class StartScanRequest(BaseModel):
+    scan_type: str = Field(default="full", pattern="^(full|incremental)$")
 
 
