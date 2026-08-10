@@ -2,8 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.application.conversation_service import AssistantTurn, ConversationDetail
 from app.application.file_service import FileDetail
+from app.application.search_service import SearchResult
 from vault_shared.db.models import (
+    Citation,
+    Conversation,
+    ConversationMessage,
+    EmbeddingJob,
+    EmbeddingProgress,
     EnrichmentJob,
     EnrichmentProgress,
     File,
@@ -385,6 +392,180 @@ class EnrichmentJobResponse(BaseModel):
             completed_at=job.completed_at,
             created_at=job.created_at,
             progress=EnrichmentProgressResponse.from_model(progress) if progress else None,
+        )
+
+
+class EmbeddingProgressResponse(BaseModel):
+    files_pending: int
+    files_processed: int
+    files_failed: int
+    current_file_name: str | None
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, progress: EmbeddingProgress) -> "EmbeddingProgressResponse":
+        return cls(
+            files_pending=progress.files_pending,
+            files_processed=progress.files_processed,
+            files_failed=progress.files_failed,
+            current_file_name=progress.current_file_name,
+            updated_at=progress.updated_at,
+        )
+
+
+class EmbeddingJobResponse(BaseModel):
+    id: str
+    connector_id: str
+    triggered_by: str
+    status: str
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    progress: EmbeddingProgressResponse | None = None
+
+    @classmethod
+    def from_model(
+        cls, job: EmbeddingJob, *, progress: EmbeddingProgress | None = None
+    ) -> "EmbeddingJobResponse":
+        return cls(
+            id=str(job.id),
+            connector_id=str(job.connector_id),
+            triggered_by=job.triggered_by,
+            status=job.status,
+            error=job.error,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            created_at=job.created_at,
+            progress=EmbeddingProgressResponse.from_model(progress) if progress else None,
+        )
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1024)
+
+
+class SearchResultResponse(BaseModel):
+    file_id: str
+    name: str
+    path: str
+    mime_type: str | None
+    score: float
+    retrieval_method: str
+
+    @classmethod
+    def from_result(cls, result: SearchResult) -> "SearchResultResponse":
+        return cls(
+            file_id=str(result.file.id),
+            name=result.file.name,
+            path=result.file.path,
+            mime_type=result.file.mime_type,
+            score=result.score,
+            retrieval_method=result.retrieval_method,
+        )
+
+
+class SearchResponse(BaseModel):
+    query: str
+    results: list[SearchResultResponse]
+
+
+class CitationResponse(BaseModel):
+    id: str
+    file_id: str
+    snippet: str | None
+    confidence: float
+    retrieval_method: str
+
+    @classmethod
+    def from_model(cls, citation: Citation) -> "CitationResponse":
+        return cls(
+            id=str(citation.id),
+            file_id=str(citation.file_id),
+            snippet=citation.snippet,
+            confidence=citation.confidence,
+            retrieval_method=citation.retrieval_method,
+        )
+
+
+class ConversationMessageResponse(BaseModel):
+    id: str
+    role: str
+    content: str
+    retrieval_method: str | None
+    provider: str | None
+    token_usage: int | None
+    created_at: datetime
+    citations: list[CitationResponse] = []
+
+    @classmethod
+    def from_model(
+        cls, message: ConversationMessage, *, citations: list[Citation] | None = None
+    ) -> "ConversationMessageResponse":
+        return cls(
+            id=str(message.id),
+            role=message.role,
+            content=message.content,
+            retrieval_method=message.retrieval_method,
+            provider=message.provider,
+            token_usage=message.token_usage,
+            created_at=message.created_at,
+            citations=[CitationResponse.from_model(c) for c in citations or []],
+        )
+
+
+class ConversationResponse(BaseModel):
+    id: str
+    title: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, conversation: Conversation) -> "ConversationResponse":
+        return cls(
+            id=str(conversation.id),
+            title=conversation.title,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at,
+        )
+
+
+class ConversationDetailResponse(ConversationResponse):
+    messages: list[ConversationMessageResponse]
+
+    @classmethod
+    def from_detail(cls, detail: ConversationDetail) -> "ConversationDetailResponse":
+        return cls(
+            id=str(detail.conversation.id),
+            title=detail.conversation.title,
+            created_at=detail.conversation.created_at,
+            updated_at=detail.conversation.updated_at,
+            messages=[
+                ConversationMessageResponse.from_model(
+                    message, citations=detail.citations_by_message_id.get(message.id)
+                )
+                for message in detail.messages
+            ],
+        )
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4096)
+
+
+class AskResponse(BaseModel):
+    conversation: ConversationResponse
+    user_message: ConversationMessageResponse
+    assistant_message: ConversationMessageResponse
+
+    @classmethod
+    def from_turn(cls, turn: AssistantTurn) -> "AskResponse":
+        return cls(
+            conversation=ConversationResponse.from_model(turn.conversation),
+            user_message=ConversationMessageResponse.from_model(turn.user_message),
+            assistant_message=ConversationMessageResponse.from_model(
+                turn.assistant_message, citations=turn.citations
+            ),
         )
 
 

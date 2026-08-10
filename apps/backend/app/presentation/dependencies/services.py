@@ -3,10 +3,15 @@ from sqlalchemy.orm import Session
 
 from app.application.auth_service import AuthService
 from app.application.connector_service import ConnectorService
+from app.application.context_builder_service import ContextBuilderService
+from app.application.conversation_service import ConversationService
+from app.application.embedding_job_service import EmbeddingJobService
 from app.application.enrichment_job_service import EnrichmentJobService
 from app.application.file_service import FileService
 from app.application.organization_service import OrganizationService
 from app.application.scan_service import ScanService
+from app.application.search_service import SearchService
+from vault_shared.ai_gateway import AIGateway, get_ai_gateway
 from vault_shared.connectors.google_workspace import (
     GoogleWorkspaceOAuthClient,
     get_google_workspace_oauth_client,
@@ -39,3 +44,23 @@ def get_enrichment_job_service(db: Session = Depends(get_db)) -> EnrichmentJobSe
 
 def get_file_service(db: Session = Depends(get_db)) -> FileService:
     return FileService(db)
+
+
+def get_embedding_job_service(db: Session = Depends(get_db)) -> EmbeddingJobService:
+    return EmbeddingJobService(db)
+
+
+def get_search_service(
+    db: Session = Depends(get_db), ai_gateway: AIGateway = Depends(get_ai_gateway)
+) -> SearchService:
+    return SearchService(db, ai_gateway=ai_gateway)
+
+
+def get_context_builder_service(db: Session = Depends(get_db)) -> ContextBuilderService:
+    return ContextBuilderService(db)
+
+
+def get_conversation_service(
+    db: Session = Depends(get_db), ai_gateway: AIGateway = Depends(get_ai_gateway)
+) -> ConversationService:
+    return ConversationService(db, ai_gateway=ai_gateway)

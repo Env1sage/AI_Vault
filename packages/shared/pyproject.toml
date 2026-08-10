@@ -9,6 +9,16 @@ dependencies = [
     "psycopg[binary]>=3.2,<4",
     "cryptography>=43,<50",
     "requests>=2.32,<3",
+    # AI Gateway (Phase 6, Handbook §8.14) — local, free, offline embedding
+    # provider (ADR-018). Lives here, not in a per-app requirements.txt,
+    # because both apps/backend (embedding a user's search query at request
+    # time) and apps/worker (embedding documents in the background) need it.
+    # gensim (pretrained GloVe word vectors, averaged per document), not
+    # sentence-transformers — this environment's platform (an old macOS)
+    # has zero available wheels for torch or onnxruntime, ruling out every
+    # transformer-based local embedding library; gensim's pure numpy/scipy
+    # stack is the one that actually installs here. See ADR-018.
+    "gensim>=4.3,<5",
 ]
 
 [project.optional-dependencies]
