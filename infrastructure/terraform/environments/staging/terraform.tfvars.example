@@ -1,0 +1,20 @@
+# See environments/production/terraform.tfvars.example's comment — same
+# idea, copy to terraform.tfvars, never commit the real file.
+
+aws_region         = "us-east-1"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+container_registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+backend_image_tag   = "replace-with-a-real-git-sha"
+worker_image_tag    = "replace-with-a-real-git-sha"
+frontend_image_tag  = "replace-with-a-real-git-sha"
+
+database_master_password = "replace-me" # pragma: allowlist secret
+jwt_secret                = "replace-me-32-bytes-minimum"
+connector_encryption_key  = "replace-me-fernet-key"
+google_client_id          = "replace-me.apps.googleusercontent.com"
+google_client_secret      = "replace-me"
+sentry_dsn                 = ""
+
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/replace-me"
+pager_email          = "oncall@example.com"

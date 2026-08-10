@@ -1,0 +1,79 @@
+# Optional local observability stack (Phase 10, ADR-022) — a separate
+# compose file, not merged into docker-compose.yml, since most local dev
+# work doesn't need a running Prometheus/Grafana. Layer it on top of the
+# main stack:
+#
+#   docker compose \
+#     -f infrastructure/docker/docker-compose.yml \
+#     -f infrastructure/docker/docker-compose.monitoring.yml \
+#     up
+#
+# Grafana: http://localhost:3001 (admin/admin, change on first login) —
+# both dashboards under infrastructure/monitoring/grafana/dashboards/ are
+# auto-provisioned. Prometheus: http://localhost:9090.
+services:
+  # Extends (not replaces) the `worker` service already defined in
+  # docker-compose.yml — Compose merges this in when both files are
+  # passed to `-f`. Every worker replica needs the *same*
+  # PROMETHEUS_MULTIPROC_DIR (and the same shared volume) as
+  # `worker-metrics` below reads from, or their counters never merge.
+  worker:
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_dir
+    volumes:
+      - prometheus-multiproc:/tmp/prometheus_multiproc_dir
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+      - worker-metrics
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+  # A dedicated process serving the worker fleet's merged Prometheus
+  # metrics (apps/worker/worker/metrics_server.py — see that module's
+  # docstring for why this can't just be a route inside a Celery worker
+  # process). Shares the worker image; overrides the command and needs its
+  # own PROMETHEUS_MULTIPROC_DIR, which every `worker` replica must also
+  # set to this same path for their counters to actually merge here.
+  worker-metrics:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/worker.Dockerfile
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://vault:vault@postgres:5432/vault
+      REDIS_URL: redis://redis:6379/0
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc_dir
+      METRICS_PORT: "9101"
+    command: ["python", "-m", "worker.metrics_server"]
+    ports:
+      - "9101:9101"
+    volumes:
+      - prometheus-multiproc:/tmp/prometheus_multiproc_dir
+    depends_on:
+      - worker
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  prometheus-multiproc:
