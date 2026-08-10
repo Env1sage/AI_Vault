@@ -2,8 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.application.file_service import FileDetail
 from vault_shared.db.models import (
+    EnrichmentJob,
+    EnrichmentProgress,
     File,
+    FileClassification,
+    FileExtraction,
+    FileMetadata,
+    KnowledgeAttribute,
     Organization,
     ScanJob,
     ScanProgress,
@@ -158,5 +165,226 @@ class ScanJobResponse(BaseModel):
 
 class StartScanRequest(BaseModel):
     scan_type: str = Field(default="full", pattern="^(full|incremental)$")
+
+
+class FileSummaryResponse(BaseModel):
+    id: str
+    name: str
+    path: str
+    mime_type: str | None
+    size_bytes: int | None
+    is_shared: bool
+    owner_email: str | None
+    provider_modified_at: datetime | None
+
+    @classmethod
+    def from_model(cls, file: File) -> "FileSummaryResponse":
+        return cls(
+            id=str(file.id),
+            name=file.name,
+            path=file.path,
+            mime_type=file.mime_type,
+            size_bytes=file.size_bytes,
+            is_shared=file.is_shared,
+            owner_email=file.owner_email,
+            provider_modified_at=file.provider_modified_at,
+        )
+
+
+class FileListResponse(BaseModel):
+    items: list[FileSummaryResponse]
+    total: int
+
+
+class FileMetadataResponse(BaseModel):
+    normalized_extension: str | None
+    mime_type_validated: bool
+    mime_mismatch_reason: str | None
+    naming_pattern: str | None
+    version_label: str | None
+    owner_summary: str | None
+    sharing_summary: str | None
+    duplicate_group_key: str | None
+    language: str | None
+    enriched_at: datetime
+
+    @classmethod
+    def from_model(cls, metadata: FileMetadata) -> "FileMetadataResponse":
+        return cls(
+            normalized_extension=metadata.normalized_extension,
+            mime_type_validated=metadata.mime_type_validated,
+            mime_mismatch_reason=metadata.mime_mismatch_reason,
+            naming_pattern=metadata.naming_pattern,
+            version_label=metadata.version_label,
+            owner_summary=metadata.owner_summary,
+            sharing_summary=metadata.sharing_summary,
+            duplicate_group_key=metadata.duplicate_group_key,
+            language=metadata.language,
+            enriched_at=metadata.enriched_at,
+        )
+
+
+class FileClassificationResponse(BaseModel):
+    document_type: str
+    confidence: float
+    method: str
+    classified_at: datetime
+
+    @classmethod
+    def from_model(cls, classification: FileClassification) -> "FileClassificationResponse":
+        return cls(
+            document_type=classification.document_type,
+            confidence=classification.confidence,
+            method=classification.method,
+            classified_at=classification.classified_at,
+        )
+
+
+class FileExtractionResponse(BaseModel):
+    """Never includes the extracted text itself — only its status/size —
+    to keep the file-detail payload small; the text exists to feed a future
+    Embedding Engine (Phase 5 spec's Search Preparation), not to be
+    rendered directly in this phase's UI."""
+
+    status: str
+    extractor_name: str | None
+    char_count: int | None
+    error: str | None
+    extracted_at: datetime
+
+    @classmethod
+    def from_model(cls, extraction: FileExtraction) -> "FileExtractionResponse":
+        return cls(
+            status=extraction.status,
+            extractor_name=extraction.extractor_name,
+            char_count=extraction.char_count,
+            error=extraction.error,
+            extracted_at=extraction.extracted_at,
+        )
+
+
+class KnowledgeAttributeResponse(BaseModel):
+    attribute_type: str
+    value: str
+    confidence: float
+    source: str
+
+    @classmethod
+    def from_model(cls, attribute: KnowledgeAttribute) -> "KnowledgeAttributeResponse":
+        return cls(
+            attribute_type=attribute.attribute_type,
+            value=attribute.value,
+            confidence=attribute.confidence,
+            source=attribute.source,
+        )
+
+
+class RelatedFileResponse(BaseModel):
+    file_id: str
+    name: str
+    path: str
+    relationship_type: str
+    confidence: float
+    metadata: dict
+
+
+class FileDetailResponse(BaseModel):
+    id: str
+    name: str
+    path: str
+    mime_type: str | None
+    size_bytes: int | None
+    is_shared: bool
+    owner_email: str | None
+    provider_modified_at: datetime | None
+    metadata: FileMetadataResponse | None
+    classification: FileClassificationResponse | None
+    extraction: FileExtractionResponse | None
+    knowledge_attributes: list[KnowledgeAttributeResponse]
+    related_files: list[RelatedFileResponse]
+
+    @classmethod
+    def from_detail(cls, detail: FileDetail) -> "FileDetailResponse":
+        file = detail.file
+        return cls(
+            id=str(file.id),
+            name=file.name,
+            path=file.path,
+            mime_type=file.mime_type,
+            size_bytes=file.size_bytes,
+            is_shared=file.is_shared,
+            owner_email=file.owner_email,
+            provider_modified_at=file.provider_modified_at,
+            metadata=FileMetadataResponse.from_model(detail.metadata) if detail.metadata else None,
+            classification=(
+                FileClassificationResponse.from_model(detail.classification)
+                if detail.classification
+                else None
+            ),
+            extraction=(
+                FileExtractionResponse.from_model(detail.extraction) if detail.extraction else None
+            ),
+            knowledge_attributes=[
+                KnowledgeAttributeResponse.from_model(attribute)
+                for attribute in detail.knowledge_attributes
+            ],
+            related_files=[
+                RelatedFileResponse(
+                    file_id=str(related.file.id),
+                    name=related.file.name,
+                    path=related.file.path,
+                    relationship_type=related.relationship.relationship_type,
+                    confidence=related.relationship.confidence,
+                    metadata=related.relationship.metadata_,
+                )
+                for related in detail.related_files
+            ],
+        )
+
+
+class EnrichmentProgressResponse(BaseModel):
+    files_pending: int
+    files_processed: int
+    files_failed: int
+    current_file_name: str | None
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, progress: EnrichmentProgress) -> "EnrichmentProgressResponse":
+        return cls(
+            files_pending=progress.files_pending,
+            files_processed=progress.files_processed,
+            files_failed=progress.files_failed,
+            current_file_name=progress.current_file_name,
+            updated_at=progress.updated_at,
+        )
+
+
+class EnrichmentJobResponse(BaseModel):
+    id: str
+    connector_id: str
+    triggered_by: str
+    status: str
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    progress: EnrichmentProgressResponse | None = None
+
+    @classmethod
+    def from_model(
+        cls, job: EnrichmentJob, *, progress: EnrichmentProgress | None = None
+    ) -> "EnrichmentJobResponse":
+        return cls(
+            id=str(job.id),
+            connector_id=str(job.connector_id),
+            triggered_by=job.triggered_by,
+            status=job.status,
+            error=job.error,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            created_at=job.created_at,
+            progress=EnrichmentProgressResponse.from_model(progress) if progress else None,
+        )
 
 

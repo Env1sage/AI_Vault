@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     # outside local development.
     connector_encryption_key: str = ""
 
+    ai_gateway_key: str = ""
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
