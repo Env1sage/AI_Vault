@@ -19,6 +19,10 @@ dependencies = [
     # transformer-based local embedding library; gensim's pure numpy/scipy
     # stack is the one that actually installs here. See ADR-018.
     "gensim>=4.3,<5",
+    # Automation Engine (Phase 9) — cron-expression parsing for scheduled
+    # workflow triggers (ADR-021). Pure Python, no wheel-compatibility
+    # concerns like the transformer libraries ADR-018 ruled out.
+    "croniter>=2.0,<7",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +30,7 @@ dev = [
     "pytest>=8.0",
     "mypy>=1.10",
     "ruff>=0.6",
+    "types-croniter>=2.0",
 ]
 
 [build-system]
