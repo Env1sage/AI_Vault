@@ -1,0 +1,78 @@
+import enum
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from vault_shared.db.session import Base
+
+if TYPE_CHECKING:
+    from vault_shared.db.models.connector_credentials import ConnectorCredentials
+
+
+class ConnectorProvider(enum.StrEnum):
+    """Only Google Workspace exists today — the column is a string, not a DB
+    enum, so adding OneDrive/Dropbox/S3/NAS (Handbook §18) is a data value,
+    never a migration."""
+
+    GOOGLE_WORKSPACE = "google_workspace"
+
+
+class ConnectorStatus(enum.StrEnum):
+    PENDING = "pending"
+    CONNECTED = "connected"
+    ERROR = "error"
+    DISCONNECTED = "disconnected"
+
+
+class StorageConnector(Base):
+    """One row per (organization, provider) — reconnecting after a disconnect
+    updates this same row rather than creating a new one, which is also what
+    makes "reject a duplicate connect attempt while already connected"
+    (Phase 3 spec's error-handling requirement) a simple status check.
+
+    No `synchronization_metadata` table yet (the phase spec lists it as
+    "placeholder only" since this phase must not scan storage) — a single
+    nullable `last_synced_at` column here is enough of a placeholder for
+    Phase 4 to build on; a dedicated table is deferred until there's a real
+    sync-cursor shape to store.
+    """
+
+    __tablename__ = "storage_connectors"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "provider", name="uq_connector_org_provider"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=ConnectorStatus.PENDING)
+
+    connected_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    account_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    workspace_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    credentials: Mapped["ConnectorCredentials | None"] = relationship(
+        back_populates="connector", uselist=False, cascade="all, delete-orphan"
+    )

@@ -44,6 +44,31 @@ class Settings(BaseSettings):
     # False for plain-http local dev; must be true anywhere served over HTTPS.
     cookie_secure: bool = False
 
+    # Phase 3 — Google Workspace Connector (ADR-014). The redirect URI is a
+    # *frontend* route: Google redirects the browser there, and that page
+    # POSTs the code/state to the backend — the backend never receives a
+    # browser-navigated redirect directly.
+    google_workspace_redirect_uri: str = "http://localhost:5173/connectors/google/callback"
+    # `drive.readonly` (Phases 3-7) is no longer sufficient once the
+    # Execution Engine (Phase 8) can move/rename/trash a file — `drive.file`
+    # was considered but only covers files the app itself created or the
+    # user explicitly opened with it, not arbitrary pre-existing files a
+    # recommendation might target, so this is the full `drive` scope
+    # instead (Handbook §13's least-privilege rule: the narrowest scope
+    # that satisfies the *current* phase's features — this is that scope
+    # now that a write-capable phase exists, not a scope grabbed early).
+    # A connector authorized before this phase only granted
+    # `drive.readonly` (see `ConnectorCredentials.granted_scopes`) and must
+    # be reconnected to pick up write access — see ADR-020.
+    google_workspace_scopes: str = "openid email profile https://www.googleapis.com/auth/drive"
+    oauth_state_ttl_seconds: int = 600
+    # Fernet key (32 url-safe base64-encoded bytes) for encrypting OAuth
+    # tokens at rest (Handbook §13 — "encrypt sensitive tokens before
+    # persistence"). No safe default — generate with
+    # `Fernet.generate_key()` and never reuse the .env.example placeholder
+    # outside local development.
+    connector_encryption_key: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
