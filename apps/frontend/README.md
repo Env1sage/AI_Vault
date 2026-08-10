@@ -6,7 +6,7 @@ Talks to `apps/backend` over the documented API surface (`src/lib/api-client.ts`
 
 Vite + React 19 + TypeScript SPA (ADR-012 — not Next.js), Tailwind CSS v4, TanStack Router (file-based, `src/routes/`) + TanStack Query, Zustand, React Hook Form + Zod, shadcn/ui conventions (`components.json`, `src/components/ui/`).
 
-Phase 1 shipped the application shell only (error boundary, loading screen, a health/version widget). 
+Phase 1 shipped the application shell only (error boundary, loading screen, a health/version widget). Phase 2 added the Identity & Organization Platform: `/login` (Google Identity Services button), a protected `/dashboard`/`/profile`/`/organization` shell with RBAC-aware route guards, `/unauthorized`, a Zustand auth store (`src/stores/auth-store.ts`) with silent session recovery and automatic 401-refresh-retry (`src/lib/session.ts`, `src/lib/api-client.ts`) — see [ADR-013](../../Docs/03_ARCHITECTURE_DECISIONS.md#adr-013-phase-2-session-strategy--client-side-google-identity-services-short-lived-jwt--rotating-httponly-refresh-cookie). 
 
 ## Local development
 
