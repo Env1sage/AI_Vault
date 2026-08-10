@@ -11,6 +11,7 @@ celery_app = Celery(
     backend=settings.redis_url,
     include=[
         "worker.tasks.health",
+        "worker.tasks.scan",
     ],
 )
 
