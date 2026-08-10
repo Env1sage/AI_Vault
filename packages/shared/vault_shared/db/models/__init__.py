@@ -1,3 +1,5 @@
+from vault_shared.db.models.approval_decision import ApprovalDecision, ApprovalDecisionType
+from vault_shared.db.models.approval_request import ApprovalRequest, ApprovalStatus
 from vault_shared.db.models.audit_log import AuditLog
 from vault_shared.db.models.citation import Citation
 from vault_shared.db.models.connector_credentials import ConnectorCredentials
@@ -19,6 +21,19 @@ from vault_shared.db.models.enrichment_job import (
     EnrichmentTrigger,
 )
 from vault_shared.db.models.enrichment_progress import EnrichmentProgress
+from vault_shared.db.models.execution_audit import ExecutionAudit
+from vault_shared.db.models.execution_job import ExecutionJob, ExecutionJobStatus
+from vault_shared.db.models.execution_plan import ExecutionPlan, ExecutionPlanStatus
+from vault_shared.db.models.execution_result import (
+    ExecutionResult,
+    ExecutionResultStatus,
+    VerificationStatus,
+)
+from vault_shared.db.models.execution_step import (
+    ExecutionActionType,
+    ExecutionStep,
+    ExecutionStepStatus,
+)
 from vault_shared.db.models.file import File
 from vault_shared.db.models.file_classification import FileClassification
 from vault_shared.db.models.file_extraction import ExtractionStatus, FileExtraction
@@ -42,6 +57,7 @@ from vault_shared.db.models.recommendation_job import (
 )
 from vault_shared.db.models.refresh_token import RefreshToken
 from vault_shared.db.models.role import Role, RoleName
+from vault_shared.db.models.rollback_record import RollbackRecord
 from vault_shared.db.models.scan_event import ScanEvent
 from vault_shared.db.models.scan_job import ScanJob, ScanStatus, ScanType
 from vault_shared.db.models.scan_progress import ScanProgress
@@ -55,6 +71,10 @@ from vault_shared.db.models.storage_source import DriveType, StorageSource
 from vault_shared.db.models.user import User
 
 __all__ = [
+    "ApprovalDecision",
+    "ApprovalDecisionType",
+    "ApprovalRequest",
+    "ApprovalStatus",
     "AuditLog",
     "Citation",
     "ConnectorCredentials",
@@ -75,6 +95,16 @@ __all__ = [
     "EnrichmentJobStatus",
     "EnrichmentProgress",
     "EnrichmentTrigger",
+    "ExecutionActionType",
+    "ExecutionAudit",
+    "ExecutionJob",
+    "ExecutionJobStatus",
+    "ExecutionPlan",
+    "ExecutionPlanStatus",
+    "ExecutionResult",
+    "ExecutionResultStatus",
+    "ExecutionStep",
+    "ExecutionStepStatus",
     "ExtractionStatus",
     "File",
     "FileClassification",
@@ -98,6 +128,7 @@ __all__ = [
     "RelationshipType",
     "Role",
     "RoleName",
+    "RollbackRecord",
     "ScanEvent",
     "ScanJob",
     "ScanProgress",
@@ -107,4 +138,5 @@ __all__ = [
     "StorageConnector",
     "StorageSource",
     "User",
+    "VerificationStatus",
 ]

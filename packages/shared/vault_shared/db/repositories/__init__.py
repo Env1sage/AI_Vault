@@ -1,3 +1,7 @@
+from vault_shared.db.repositories.approval_decision_repository import (
+    ApprovalDecisionRepository,
+)
+from vault_shared.db.repositories.approval_request_repository import ApprovalRequestRepository
 from vault_shared.db.repositories.audit_log_repository import AuditLogRepository
 from vault_shared.db.repositories.citation_repository import CitationRepository
 from vault_shared.db.repositories.connector_credentials_repository import (
@@ -21,6 +25,11 @@ from vault_shared.db.repositories.enrichment_job_repository import EnrichmentJob
 from vault_shared.db.repositories.enrichment_progress_repository import (
     EnrichmentProgressRepository,
 )
+from vault_shared.db.repositories.execution_audit_repository import ExecutionAuditRepository
+from vault_shared.db.repositories.execution_job_repository import ExecutionJobRepository
+from vault_shared.db.repositories.execution_plan_repository import ExecutionPlanRepository
+from vault_shared.db.repositories.execution_result_repository import ExecutionResultRepository
+from vault_shared.db.repositories.execution_step_repository import ExecutionStepRepository
 from vault_shared.db.repositories.file_classification_repository import (
     FileClassificationRepository,
 )
@@ -43,6 +52,7 @@ from vault_shared.db.repositories.recommendation_job_repository import (
 from vault_shared.db.repositories.recommendation_repository import RecommendationRepository
 from vault_shared.db.repositories.refresh_token_repository import RefreshTokenRepository
 from vault_shared.db.repositories.role_repository import RoleRepository
+from vault_shared.db.repositories.rollback_record_repository import RollbackRecordRepository
 from vault_shared.db.repositories.scan_event_repository import ScanEventRepository
 from vault_shared.db.repositories.scan_job_repository import ScanJobRepository
 from vault_shared.db.repositories.scan_progress_repository import ScanProgressRepository
@@ -54,6 +64,8 @@ from vault_shared.db.repositories.storage_source_repository import StorageSource
 from vault_shared.db.repositories.user_repository import UserRepository
 
 __all__ = [
+    "ApprovalDecisionRepository",
+    "ApprovalRequestRepository",
     "AuditLogRepository",
     "CitationRepository",
     "ConnectorCredentialsRepository",
@@ -67,6 +79,11 @@ __all__ = [
     "EnrichmentEventRepository",
     "EnrichmentJobRepository",
     "EnrichmentProgressRepository",
+    "ExecutionAuditRepository",
+    "ExecutionJobRepository",
+    "ExecutionPlanRepository",
+    "ExecutionResultRepository",
+    "ExecutionStepRepository",
     "FileClassificationRepository",
     "FileExtractionRepository",
     "FileMetadataRepository",
@@ -81,6 +98,7 @@ __all__ = [
     "RecommendationRepository",
     "RefreshTokenRepository",
     "RoleRepository",
+    "RollbackRecordRepository",
     "ScanEventRepository",
     "ScanJobRepository",
     "ScanProgressRepository",

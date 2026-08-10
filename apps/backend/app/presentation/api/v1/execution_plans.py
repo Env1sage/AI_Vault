@@ -1,0 +1,81 @@
+import uuid
+
+from fastapi import APIRouter, Depends, Query
+
+from app.application.execution_job_service import ExecutionJobService
+from app.application.execution_plan_service import ExecutionPlanService
+from app.presentation.api.v1.schemas import (
+    CreateExecutionPlanRequest,
+    ExecutionJobResponse,
+    ExecutionPlanDetailResponse,
+    ExecutionPlanResponse,
+)
+from app.presentation.dependencies.auth import get_current_user, require_role
+from app.presentation.dependencies.rate_limit import rate_limiter
+from app.presentation.dependencies.services import (
+    get_execution_job_service,
+    get_execution_plan_service,
+)
+from vault_shared.db.models import RoleName, User
+
+execution_plans_router = APIRouter(tags=["execution-plans"])
+
+_require_owner_or_admin = require_role(RoleName.OWNER, RoleName.ADMIN)
+_create_plan_rate_limit = rate_limiter("execution-plan-create", limit=30, window_seconds=60)
+
+
+@execution_plans_router.post(
+    "/execution-plans",
+    response_model=ExecutionPlanResponse,
+    status_code=201,
+    dependencies=[Depends(_create_plan_rate_limit)],
+)
+def create_execution_plan(
+    request: CreateExecutionPlanRequest,
+    user: User = Depends(_require_owner_or_admin),
+    service: ExecutionPlanService = Depends(get_execution_plan_service),
+) -> ExecutionPlanResponse:
+    plan = service.create_plan(
+        uuid.UUID(request.recommendation_id),
+        organization_id=user.organization_id,
+        user_id=user.id,
+    )
+    return ExecutionPlanResponse.from_model(plan)
+
+
+@execution_plans_router.get("/execution-plans", response_model=list[ExecutionPlanResponse])
+def list_execution_plans(
+    status: str | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    service: ExecutionPlanService = Depends(get_execution_plan_service),
+) -> list[ExecutionPlanResponse]:
+    plans = service.list_for_organization(user.organization_id, status=status)
+    return [ExecutionPlanResponse.from_model(plan) for plan in plans]
+
+
+@execution_plans_router.get(
+    "/execution-plans/{execution_plan_id}", response_model=ExecutionPlanDetailResponse
+)
+def get_execution_plan(
+    execution_plan_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    service: ExecutionPlanService = Depends(get_execution_plan_service),
+) -> ExecutionPlanDetailResponse:
+    detail = service.get_detail(execution_plan_id, organization_id=user.organization_id)
+    return ExecutionPlanDetailResponse.from_detail(detail)
+
+
+@execution_plans_router.post(
+    "/execution-plans/{execution_plan_id}/rollback",
+    response_model=ExecutionJobResponse,
+    status_code=201,
+)
+def rollback_execution_plan(
+    execution_plan_id: uuid.UUID,
+    user: User = Depends(_require_owner_or_admin),
+    service: ExecutionJobService = Depends(get_execution_job_service),
+) -> ExecutionJobResponse:
+    job = service.trigger_rollback(
+        execution_plan_id, organization_id=user.organization_id, user_id=user.id
+    )
+    return ExecutionJobResponse.from_model(job)
