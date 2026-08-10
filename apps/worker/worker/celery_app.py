@@ -13,6 +13,7 @@ celery_app = Celery(
         "worker.tasks.health",
         "worker.tasks.scan",
         "worker.tasks.enrichment",
+        "worker.tasks.embedding",
     ],
 )
 

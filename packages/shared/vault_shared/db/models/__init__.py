@@ -1,5 +1,16 @@
 from vault_shared.db.models.audit_log import AuditLog
+from vault_shared.db.models.citation import Citation
 from vault_shared.db.models.connector_credentials import ConnectorCredentials
+from vault_shared.db.models.conversation import Conversation
+from vault_shared.db.models.conversation_message import ConversationMessage, MessageRole
+from vault_shared.db.models.embedding import Embedding
+from vault_shared.db.models.embedding_event import EmbeddingEvent
+from vault_shared.db.models.embedding_job import (
+    EmbeddingJob,
+    EmbeddingJobStatus,
+    EmbeddingTrigger,
+)
+from vault_shared.db.models.embedding_progress import EmbeddingProgress
 from vault_shared.db.models.enrichment_event import EnrichmentEvent
 from vault_shared.db.models.enrichment_job import (
     EnrichmentJob,
@@ -20,6 +31,7 @@ from vault_shared.db.models.role import Role, RoleName
 from vault_shared.db.models.scan_event import ScanEvent
 from vault_shared.db.models.scan_job import ScanJob, ScanStatus, ScanType
 from vault_shared.db.models.scan_progress import ScanProgress
+from vault_shared.db.models.search_session import SearchSession
 from vault_shared.db.models.storage_connector import (
     ConnectorProvider,
     ConnectorStatus,
@@ -30,10 +42,19 @@ from vault_shared.db.models.user import User
 
 __all__ = [
     "AuditLog",
+    "Citation",
     "ConnectorCredentials",
     "ConnectorProvider",
     "ConnectorStatus",
+    "Conversation",
+    "ConversationMessage",
     "DriveType",
+    "Embedding",
+    "EmbeddingEvent",
+    "EmbeddingJob",
+    "EmbeddingJobStatus",
+    "EmbeddingProgress",
+    "EmbeddingTrigger",
     "EnrichmentEvent",
     "EnrichmentJob",
     "EnrichmentJobStatus",
@@ -47,6 +68,7 @@ __all__ = [
     "FileRelationship",
     "Folder",
     "KnowledgeAttribute",
+    "MessageRole",
     "Organization",
     "RefreshToken",
     "RelationshipType",
@@ -57,6 +79,7 @@ __all__ = [
     "ScanProgress",
     "ScanStatus",
     "ScanType",
+    "SearchSession",
     "StorageConnector",
     "StorageSource",
     "User",
