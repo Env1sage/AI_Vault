@@ -1,0 +1,11 @@
+[project]
+name = "vault-backend"
+version = "0.1.0"
+description = "AI Project Vault API — presentation/application/domain/infrastructure layers (Engineering Handbook §6.1.2)."
+requires-python = ">=3.11"
+
+[tool.ruff]
+extend = "../../packages/config/python/ruff.toml"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

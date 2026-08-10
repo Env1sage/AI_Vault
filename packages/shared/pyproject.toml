@@ -1,0 +1,28 @@
+[project]
+name = "vault-shared"
+version = "0.1.0"
+description = "Cross-cutting Python code shared by apps/backend and apps/worker: settings, structured logging, typed errors, the DB layer (models/repositories/session), token encryption, and the Google Workspace connector's OAuth client + token-refresh service — anything both apps must access identically (Handbook §8.15)."
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic-settings>=2.4,<3",
+    "sqlalchemy>=2.0,<3",
+    "psycopg[binary]>=3.2,<4",
+    "cryptography>=43,<50",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.10",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["vault_shared*"]
+
+[tool.ruff]
+extend = "../config/python/ruff.toml"

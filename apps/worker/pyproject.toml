@@ -1,0 +1,8 @@
+[project]
+name = "vault-worker"
+version = "0.1.0"
+description = "AI Project Vault background worker — Celery job consumer (Engineering Handbook §8.15)."
+requires-python = ">=3.11"
+
+[tool.ruff]
+extend = "../../packages/config/python/ruff.toml"

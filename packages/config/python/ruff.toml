@@ -1,0 +1,14 @@
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[lint.isort]
+known-first-party = ["app", "worker", "vault_shared"]
+
+[lint.flake8-bugbear]
+# FastAPI's dependency-injection pattern requires `Depends(...)` as a
+# default argument value — this is documented, idiomatic FastAPI, not the
+# mutable-default-argument bug B008 otherwise correctly flags.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends", "fastapi.Security"]
