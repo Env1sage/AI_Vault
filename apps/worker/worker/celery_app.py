@@ -12,6 +12,7 @@ celery_app = Celery(
     include=[
         "worker.tasks.health",
         "worker.tasks.scan",
+        "worker.tasks.enrichment",
     ],
 )
 

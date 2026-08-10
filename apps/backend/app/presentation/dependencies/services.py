@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.application.auth_service import AuthService
 from app.application.connector_service import ConnectorService
+from app.application.enrichment_job_service import EnrichmentJobService
+from app.application.file_service import FileService
 from app.application.organization_service import OrganizationService
 from app.application.scan_service import ScanService
 from vault_shared.connectors.google_workspace import (
@@ -29,3 +31,11 @@ def get_connector_service(
 
 def get_scan_service(db: Session = Depends(get_db)) -> ScanService:
     return ScanService(db)
+
+
+def get_enrichment_job_service(db: Session = Depends(get_db)) -> EnrichmentJobService:
+    return EnrichmentJobService(db)
+
+
+def get_file_service(db: Session = Depends(get_db)) -> FileService:
+    return FileService(db)
