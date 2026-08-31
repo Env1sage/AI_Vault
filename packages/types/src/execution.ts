@@ -37,7 +37,8 @@ export type ExecutionRiskLevel = "low" | "medium" | "high";
 export interface ExecutionPlan {
   id: string;
   organization_id: string;
-  recommendation_id: string;
+  recommendation_id: string | null;
+  duplicate_group_id: string | null;
   status: ExecutionPlanStatus;
   target_provider: string;
   estimated_impact: string;
@@ -53,8 +54,14 @@ export interface ExecutionPlanDetail extends ExecutionPlan {
   steps: ExecutionStep[];
 }
 
+/** Exactly one origin must be set: `recommendation_id`, `duplicate_group_id`,
+ * or `file_ids` (paired with `action_type`, currently "archive" only) for an
+ * ad-hoc plan built from a Storage Intelligence file listing. */
 export interface CreateExecutionPlanRequest {
-  recommendation_id: string;
+  recommendation_id?: string;
+  duplicate_group_id?: string;
+  file_ids?: string[];
+  action_type?: ExecutionActionType;
 }
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "changes_requested" | "expired";

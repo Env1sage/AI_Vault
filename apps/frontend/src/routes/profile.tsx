@@ -1,7 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import type { UserProfile } from "@vault/types";
 
+import { AppShell } from "@/components/app-shell/app-shell";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -14,6 +20,21 @@ export const Route = createFileRoute("/profile")({
   component: ProfilePage,
 });
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const letters = parts.length > 1 ? [parts[0]?.[0], parts.at(-1)?.[0]] : [parts[0]?.[0]];
+  return letters.filter(Boolean).join("").toUpperCase() || "?";
+}
+
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium">{value}</span>
+    </div>
+  );
+}
+
 function ProfilePage() {
   const profileQuery = useQuery({
     queryKey: ["me"],
@@ -21,34 +42,42 @@ function ProfilePage() {
   });
 
   return (
-    <main className="mx-auto flex max-w-md flex-col gap-4 p-8">
-      <Link to="/dashboard" className="text-sm underline">
-        ← Back to dashboard
-      </Link>
-      <h1 className="text-xl font-semibold">Profile</h1>
+    <AppShell title="Profile">
+      <div className="mx-auto flex max-w-md flex-col gap-4">
+        <h1 className="text-xl font-semibold tracking-tight">Profile</h1>
 
-      {profileQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {profileQuery.isError && <p className="text-sm text-red-600">Couldn't load your profile.</p>}
+        {profileQuery.isLoading && <Skeleton className="h-48 rounded-2xl" />}
+        {profileQuery.isError && (
+          <EmptyState title="Couldn't load your profile" description="Please try again." />
+        )}
 
-      {profileQuery.data && (
-        <dl className="grid grid-cols-2 gap-y-2 text-sm">
-          <dt className="text-neutral-500">Name</dt>
-          <dd>{profileQuery.data.name}</dd>
-
-          <dt className="text-neutral-500">Email</dt>
-          <dd>{profileQuery.data.email}</dd>
-
-          <dt className="text-neutral-500">Role</dt>
-          <dd className="capitalize">{profileQuery.data.role}</dd>
-
-          <dt className="text-neutral-500">Last login</dt>
-          <dd>
-            {profileQuery.data.last_login_at
-              ? new Date(profileQuery.data.last_login_at).toLocaleString()
-              : "—"}
-          </dd>
-        </dl>
-      )}
-    </main>
+        {profileQuery.data && (
+          <Card clay className="p-6">
+            <div className="flex items-center gap-3">
+              <Avatar className="size-12">
+                <AvatarFallback className="text-base">{initials(profileQuery.data.name)}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-semibold">{profileQuery.data.name}</p>
+                <Badge variant="outline" className="mt-1 capitalize">
+                  {profileQuery.data.role}
+                </Badge>
+              </div>
+            </div>
+            <CardContent className="mt-4 divide-y divide-border p-0">
+              <Field label="Email" value={profileQuery.data.email} />
+              <Field
+                label="Last login"
+                value={
+                  profileQuery.data.last_login_at
+                    ? new Date(profileQuery.data.last_login_at).toLocaleString()
+                    : "—"
+                }
+              />
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </AppShell>
   );
 }

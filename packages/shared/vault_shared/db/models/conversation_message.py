@@ -21,11 +21,15 @@ class MessageRole(enum.StrEnum):
 
 class ConversationMessage(Base):
     """One turn in a `Conversation`. Only `ASSISTANT` messages carry
-    `retrieval_method`/`provider`/`token_usage`/`citations` — a `USER`
-    message is just the question as asked. `provider` records which AI
-    Gateway adapter actually answered (Phase 6 spec's "AI providers remain
-    fully interchangeable" — this is what proves it, per-message, rather
-    than assuming from config)."""
+    `retrieval_method`/`provider`/`token_usage`/`tool_name`/`citations` — a
+    `USER` message is just the question as asked. `provider` records which
+    AI Gateway adapter actually answered (Phase 6 spec's "AI providers
+    remain fully interchangeable" — this is what proves it, per-message,
+    rather than assuming from config). `tool_name` is separate from
+    `retrieval_method` (String(20), too narrow for names like
+    "get_storage_statistics") — set only when the AI Storage Assistant's
+    deterministic intent classifier routed this turn to a tool instead of
+    the semantic-search RAG path."""
 
     __tablename__ = "conversation_messages"
 
@@ -40,6 +44,7 @@ class ConversationMessage(Base):
     retrieval_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     token_usage: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tool_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True

@@ -1,6 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from app.application.ai_provider_config_service import AIProviderConfigService
 from app.application.approval_service import ApprovalService
 from app.application.auth_service import AuthService
 from app.application.automation_template_service import AutomationTemplateService
@@ -13,11 +14,13 @@ from app.application.enrichment_job_service import EnrichmentJobService
 from app.application.execution_job_service import ExecutionJobService
 from app.application.execution_plan_service import ExecutionPlanService
 from app.application.file_service import FileService
+from app.application.intelligence_job_service import IntelligenceJobService
 from app.application.notification_service import NotificationService
 from app.application.organization_service import OrganizationService
 from app.application.recommendation_service import RecommendationService
 from app.application.scan_service import ScanService
 from app.application.search_service import SearchService
+from app.application.storage_intelligence_service import StorageIntelligenceService
 from app.application.workflow_execution_service import WorkflowExecutionService
 from app.application.workflow_policy_service import WorkflowPolicyService
 from app.application.workflow_service import WorkflowService
@@ -38,6 +41,10 @@ def get_organization_service(db: Session = Depends(get_db)) -> OrganizationServi
     return OrganizationService(db)
 
 
+def get_ai_provider_config_service(db: Session = Depends(get_db)) -> AIProviderConfigService:
+    return AIProviderConfigService(db)
+
+
 def get_connector_service(
     db: Session = Depends(get_db),
     oauth_client: GoogleWorkspaceOAuthClient = Depends(get_google_workspace_oauth_client),
@@ -51,6 +58,10 @@ def get_scan_service(db: Session = Depends(get_db)) -> ScanService:
 
 def get_enrichment_job_service(db: Session = Depends(get_db)) -> EnrichmentJobService:
     return EnrichmentJobService(db)
+
+
+def get_intelligence_job_service(db: Session = Depends(get_db)) -> IntelligenceJobService:
+    return IntelligenceJobService(db)
 
 
 def get_file_service(db: Session = Depends(get_db)) -> FileService:
@@ -83,6 +94,12 @@ def get_dashboard_service(db: Session = Depends(get_db)) -> DashboardService:
 
 def get_recommendation_service(db: Session = Depends(get_db)) -> RecommendationService:
     return RecommendationService(db)
+
+
+def get_storage_intelligence_service(
+    db: Session = Depends(get_db),
+) -> StorageIntelligenceService:
+    return StorageIntelligenceService(db)
 
 
 def get_execution_plan_service(db: Session = Depends(get_db)) -> ExecutionPlanService:

@@ -4,7 +4,7 @@
 export interface Connector {
   id: string;
   provider: "google_workspace";
-  status: "pending" | "connected" | "error" | "disconnected";
+  status: "pending" | "connected" | "error" | "disconnected" | "reauth_required";
   account_email: string | null;
   workspace_domain: string | null;
   last_verified_at: string | null;

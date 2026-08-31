@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { categoryColor, categoryLabel, riskColor } from "./recommendation-style";
+import {
+  categoryBadgeVariant,
+  categoryColor,
+  categoryLabel,
+  riskBadgeVariant,
+  riskColor,
+} from "./recommendation-style";
 
 describe("categoryLabel", () => {
   it("labels each known category", () => {
@@ -12,9 +18,19 @@ describe("categoryLabel", () => {
   });
 });
 
+describe("categoryBadgeVariant", () => {
+  it("gives security the destructive badge variant", () => {
+    expect(categoryBadgeVariant("security")).toBe("destructive");
+  });
+
+  it("gives distinct variants to different categories", () => {
+    expect(categoryBadgeVariant("security")).not.toBe(categoryBadgeVariant("storage_optimization"));
+  });
+});
+
 describe("categoryColor", () => {
-  it("gives security a red-toned color", () => {
-    expect(categoryColor("security")).toContain("red");
+  it("gives security a destructive-toned color", () => {
+    expect(categoryColor("security")).toContain("destructive");
   });
 
   it("gives distinct colors to different categories", () => {
@@ -22,16 +38,30 @@ describe("categoryColor", () => {
   });
 });
 
+describe("riskBadgeVariant", () => {
+  it("highlights high risk as destructive", () => {
+    expect(riskBadgeVariant("high")).toBe("destructive");
+  });
+
+  it("highlights medium risk as warning", () => {
+    expect(riskBadgeVariant("medium")).toBe("warning");
+  });
+
+  it("uses the default variant for low risk", () => {
+    expect(riskBadgeVariant("low")).toBe("default");
+  });
+});
+
 describe("riskColor", () => {
-  it("highlights high risk in red", () => {
-    expect(riskColor("high")).toBe("text-red-600");
+  it("highlights high risk in the destructive token color", () => {
+    expect(riskColor("high")).toBe("text-destructive");
   });
 
-  it("highlights medium risk in amber", () => {
-    expect(riskColor("medium")).toBe("text-amber-600");
+  it("highlights medium risk in the warning token color", () => {
+    expect(riskColor("medium")).toBe("text-warning");
   });
 
-  it("uses a neutral color for low risk", () => {
-    expect(riskColor("low")).toBe("text-neutral-500");
+  it("uses a muted color for low risk", () => {
+    expect(riskColor("low")).toBe("text-muted-foreground");
   });
 });

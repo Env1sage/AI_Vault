@@ -23,14 +23,17 @@ class ExecutionPlanStatus(enum.StrEnum):
 
 
 class ExecutionPlan(Base):
-    """A deterministic, reviewable translation of one `Recommendation` into
-    ordered `ExecutionStep`s (Handbook §8.7's Execution Engine, Phase 8
-    spec's Execution Planner). Creating a plan performs no mutating Drive
-    call itself — it only reads already-stored `File`/`Recommendation`
+    """A deterministic, reviewable translation of one `Recommendation` OR
+    one Storage Intelligence `DuplicateGroup` into ordered `ExecutionStep`s
+    (Handbook §8.7's Execution Engine, Phase 8 spec's Execution Planner;
+    the `DuplicateGroup` origin added post-hardening — ADR-024). Exactly
+    one of `recommendation_id`/`duplicate_group_id` is ever set, enforced
+    by a DB check constraint, not just application logic. Creating a plan
+    performs no mutating Drive call itself — it only reads already-stored
     state — and always creates a companion `ApprovalRequest` in the same
     transaction, since the Core Philosophy's lifecycle
-    (Recommendation → Plan → Human Review → Approval → Execution) has no
-    state where a plan exists without something pending review."""
+    (origin → Plan → Human Review → Approval → Execution) has no state
+    where a plan exists without something pending review."""
 
     __tablename__ = "execution_plans"
 
@@ -40,8 +43,11 @@ class ExecutionPlan(Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    recommendation_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("recommendations.id", ondelete="CASCADE"), nullable=False, index=True
+    recommendation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("recommendations.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    duplicate_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("duplicate_groups.id", ondelete="CASCADE"), nullable=True, index=True
     )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id"), nullable=False

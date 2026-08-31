@@ -27,10 +27,17 @@ class _FakeExecutionStep:
 
 
 class _FakeExecutionPlan:
-    def __init__(self, *, status: str = "pending_approval", risk_level: str = "medium") -> None:
+    def __init__(
+        self,
+        *,
+        status: str = "pending_approval",
+        risk_level: str = "medium",
+        duplicate_group_id: uuid.UUID | None = None,
+    ) -> None:
         self.id = uuid.uuid4()
         self.organization_id = uuid.uuid4()
-        self.recommendation_id = uuid.uuid4()
+        self.recommendation_id = None if duplicate_group_id else uuid.uuid4()
+        self.duplicate_group_id = duplicate_group_id
         self.status = status
         self.target_provider = "google_workspace"
         self.estimated_impact = "17 files, ~16.5 MB"
@@ -116,6 +123,45 @@ def test_member_cannot_create_an_execution_plan(as_member, fake_plan_service) ->
 
     assert response.status_code == 403
     fake_plan_service.create_plan.assert_not_called()
+
+
+def test_owner_can_create_an_execution_plan_from_a_duplicate_group(
+    as_owner, fake_plan_service
+) -> None:
+    group_id = uuid.uuid4()
+    fake_plan_service.create_plan_from_duplicate_group.return_value = _FakeExecutionPlan(
+        duplicate_group_id=group_id
+    )
+
+    response = client.post(
+        "/v1/execution-plans", json={"duplicate_group_id": str(group_id)}
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["duplicate_group_id"] == str(group_id)
+    assert body["recommendation_id"] is None
+    fake_plan_service.create_plan_from_duplicate_group.assert_called_once()
+    fake_plan_service.create_plan.assert_not_called()
+
+
+def test_create_execution_plan_rejects_neither_origin_provided(as_owner, fake_plan_service) -> None:
+    response = client.post("/v1/execution-plans", json={})
+
+    assert response.status_code == 422
+    fake_plan_service.create_plan.assert_not_called()
+    fake_plan_service.create_plan_from_duplicate_group.assert_not_called()
+
+
+def test_create_execution_plan_rejects_both_origins_provided(as_owner, fake_plan_service) -> None:
+    response = client.post(
+        "/v1/execution-plans",
+        json={"recommendation_id": str(uuid.uuid4()), "duplicate_group_id": str(uuid.uuid4())},
+    )
+
+    assert response.status_code == 422
+    fake_plan_service.create_plan.assert_not_called()
+    fake_plan_service.create_plan_from_duplicate_group.assert_not_called()
 
 
 def test_create_execution_plan_propagates_validation_error_for_a_non_executable_rule(

@@ -47,6 +47,15 @@ WORKFLOW_EXECUTIONS_TOTAL = Counter(
     "Workflow executions by terminal status",
     ["status"],
 )
+ASSISTANT_TOOL_USED_TOTAL = Counter(
+    "vault_assistant_tool_used_total",
+    "AI Storage Assistant turns by which tool (if any) the deterministic "
+    "intent classifier routed to — label 'none' means it fell through to "
+    "semantic search, label 'rate_limited' means a tool match was skipped "
+    "for exceeding the service-layer rate limit (ADR-024). A rising "
+    "'none' share signals the classifier's rule table needs more coverage.",
+    ["tool"],
+)
 
 
 def record_http_request(
@@ -73,6 +82,10 @@ def record_ai_provider_latency(*, provider: str, operation: str, duration_second
 
 def record_workflow_execution(status: str) -> None:
     WORKFLOW_EXECUTIONS_TOTAL.labels(status=status).inc()
+
+
+def record_assistant_tool_used(tool: str) -> None:
+    ASSISTANT_TOOL_USED_TOTAL.labels(tool=tool).inc()
 
 
 def generate_latest_metrics() -> bytes:

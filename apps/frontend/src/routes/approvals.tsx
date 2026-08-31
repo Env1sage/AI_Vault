@@ -6,11 +6,24 @@ import type {
   ExecutionPlan,
   ExecutionPlanDetail,
 } from "@vault/types";
+import { AlertTriangle, ClipboardCheck } from "lucide-react";
 import { useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { AppShell } from "@/components/app-shell/app-shell";
 import { ApiError, apiClient } from "@/lib/api-client";
-import { approvalStatusColor, riskLevelColor } from "@/lib/execution-style";
+import { approvalStatusBadgeVariant, riskLevelBadgeVariant } from "@/lib/execution-style";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -60,41 +73,44 @@ function ApprovalRow({
   const approveDisabled = decideMutation.isPending || (isHighRisk && !highRiskAck);
 
   return (
-    <li className="flex flex-col gap-3 rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+    <Card className="flex flex-col gap-3 p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-2.5">
           {isPending && canManage && (
             <input
               type="checkbox"
               checked={selected}
               onChange={onToggleSelected}
-              className="mt-1"
+              className="mt-1 size-4 accent-primary"
               aria-label="Select for bulk decision"
             />
           )}
-          <div>
-            <span className={`font-medium capitalize ${approvalStatusColor(approval.status)}`}>
-              {approval.status.replace(/_/g, " ")}
-            </span>
-            <Link
-              to="/execution-plans/$executionPlanId"
-              params={{ executionPlanId: approval.execution_plan_id }}
-              className="ml-2 text-xs underline"
-            >
-              view plan
-            </Link>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Badge variant={approvalStatusBadgeVariant(approval.status)} className="capitalize">
+                {approval.status.replace(/_/g, " ")}
+              </Badge>
+              <Link
+                to="/execution-plans/$executionPlanId"
+                params={{ executionPlanId: approval.execution_plan_id }}
+                className="text-xs text-primary hover:underline"
+              >
+                view plan
+              </Link>
+            </div>
           </div>
         </div>
-        <span className="shrink-0 text-xs text-neutral-400">
+        <span className="shrink-0 text-xs text-muted-foreground">
           expires {formatRelativeTime(approval.expires_at)}
         </span>
       </div>
 
-      {planLoading && <p className="text-xs text-neutral-500">Loading plan…</p>}
+      {planLoading && <Skeleton className="h-4 w-48" />}
       {plan && (
-        <div className="flex items-center gap-3 text-xs text-neutral-500">
-          <span className={riskLevelColor(plan.risk_level)}>{plan.risk_level} risk</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant={riskLevelBadgeVariant(plan.risk_level)}>{plan.risk_level} risk</Badge>
           <span>{plan.estimated_impact}</span>
+          <span>·</span>
           <span>{plan.target_provider}</span>
         </div>
       )}
@@ -106,28 +122,30 @@ function ApprovalRow({
             onChange={(event) => setComments(event.target.value)}
             placeholder="Comments (optional)"
             rows={2}
-            className="rounded-md border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950"
+            className="w-full resize-none rounded-lg border border-input bg-card px-3 py-2 text-sm shadow-clay-inset placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
 
           {isHighRisk && (
-            <label className="flex items-center gap-2 text-xs text-amber-600">
-              <input
-                type="checkbox"
-                checked={highRiskAck}
-                onChange={(event) => setHighRiskAck(event.target.checked)}
-              />
-              This is a high-risk plan ({plan?.estimated_impact}) — I've reviewed it and want to
-              approve it.
+            <label className="flex items-start gap-2 rounded-lg bg-warning-muted p-2.5 text-xs text-warning">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={highRiskAck}
+                  onChange={(event) => setHighRiskAck(event.target.checked)}
+                  className="size-3.5 accent-warning"
+                />
+                This is a high-risk plan ({plan?.estimated_impact}) — I&rsquo;ve reviewed it and
+                want to approve it.
+              </span>
             </label>
           )}
 
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={approveDisabled}
-              onClick={() => decideMutation.mutate("approve")}
-            >
-              Approve
+            <Button size="sm" disabled={approveDisabled} onClick={() => decideMutation.mutate("approve")}>
+              {decideMutation.isPending && decideMutation.variables === "approve"
+                ? "Approving…"
+                : "Approve"}
             </Button>
             <Button
               size="sm"
@@ -135,7 +153,9 @@ function ApprovalRow({
               disabled={decideMutation.isPending}
               onClick={() => decideMutation.mutate("request_changes")}
             >
-              Request changes
+              {decideMutation.isPending && decideMutation.variables === "request_changes"
+                ? "Requesting…"
+                : "Request changes"}
             </Button>
             <Button
               size="sm"
@@ -143,12 +163,14 @@ function ApprovalRow({
               disabled={decideMutation.isPending}
               onClick={() => decideMutation.mutate("reject")}
             >
-              Reject
+              {decideMutation.isPending && decideMutation.variables === "reject"
+                ? "Rejecting…"
+                : "Reject"}
             </Button>
           </div>
 
           {decideMutation.isError && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-destructive">
               {decideMutation.error instanceof ApiError
                 ? decideMutation.error.message
                 : "Couldn't record this decision."}
@@ -156,7 +178,7 @@ function ApprovalRow({
           )}
         </>
       )}
-    </li>
+    </Card>
   );
 }
 
@@ -172,7 +194,7 @@ function ApprovalQueuePage() {
   const [bulkHighRiskAck, setBulkHighRiskAck] = useState(false);
 
   const params = new URLSearchParams();
-  if (status) params.set("status", status);
+  if (status !== "all") params.set("status", status);
 
   const approvalsQuery = useQuery({
     queryKey: ["approvals", status],
@@ -232,102 +254,121 @@ function ApprovalQueuePage() {
     (bulkDecision === "approve" && selectedHasHighRisk && !bulkHighRiskAck);
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
-      <Link to="/dashboard" className="text-sm underline">
-        ← Back to dashboard
-      </Link>
-      <h1 className="text-xl font-semibold">Approval Queue</h1>
-      <p className="text-sm text-neutral-500">
-        Approving a plan enqueues real Google Drive changes. Every decision is recorded with who
-        made it, when, and why.
-      </p>
+    <AppShell title="Approvals">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Approval Queue</h1>
+          <p className="text-sm text-muted-foreground">
+            Approving a plan enqueues real Google Drive changes. Every decision is recorded with
+            who made it, when, and why.
+          </p>
+        </div>
 
-      <select
-        value={status}
-        onChange={(event) => {
-          setStatus(event.target.value);
-          setSelected(new Set());
-        }}
-        className="w-fit rounded-md border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950"
-      >
-        <option value="pending">Pending</option>
-        <option value="approved">Approved</option>
-        <option value="rejected">Rejected</option>
-        <option value="changes_requested">Changes requested</option>
-        <option value="expired">Expired</option>
-        <option value="">All statuses</option>
-      </select>
+        <Select
+          value={status}
+          onValueChange={(value) => {
+            setStatus(value);
+            setSelected(new Set());
+          }}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="changes_requested">Changes requested</SelectItem>
+            <SelectItem value="expired">Expired</SelectItem>
+            <SelectItem value="all">All statuses</SelectItem>
+          </SelectContent>
+        </Select>
 
-      {approvalsQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {approvalsQuery.isError && <p className="text-sm text-red-600">Couldn't load approvals.</p>}
-      {approvals.length === 0 && !approvalsQuery.isLoading && (
-        <p className="text-sm text-neutral-500">No approval requests match these filters.</p>
-      )}
-
-      {canManage && status === "pending" && selected.size > 0 && (
-        <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-          <h2 className="mb-3 font-medium">Bulk decide ({selected.size} selected)</h2>
-          <div className="flex flex-col gap-3">
-            <select
-              value={bulkDecision}
-              onChange={(event) => {
-                setBulkDecision(event.target.value as ApprovalDecisionType);
-                setBulkHighRiskAck(false);
-              }}
-              className="w-fit rounded-md border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950"
-            >
-              <option value="approve">Approve</option>
-              <option value="request_changes">Request changes</option>
-              <option value="reject">Reject</option>
-            </select>
-            <textarea
-              value={bulkComments}
-              onChange={(event) => setBulkComments(event.target.value)}
-              placeholder="Comments (optional, applied to all)"
-              rows={2}
-              className="rounded-md border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950"
-            />
-            {bulkDecision === "approve" && selectedHasHighRisk && (
-              <label className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
-                <input
-                  type="checkbox"
-                  checked={bulkHighRiskAck}
-                  onChange={(event) => setBulkHighRiskAck(event.target.checked)}
-                />
-                One or more selected plans is high-risk — I've reviewed them and want to approve.
-              </label>
-            )}
-            <Button
-              className="w-fit"
-              disabled={bulkDisabled}
-              onClick={() => bulkMutation.mutate()}
-            >
-              {bulkMutation.isPending ? "Submitting…" : `${bulkDecision.replace(/_/g, " ")} all`}
-            </Button>
-            {bulkMutation.isError && (
-              <p className="text-sm text-red-600">
-                {bulkMutation.error instanceof ApiError
-                  ? bulkMutation.error.message
-                  : "Couldn't submit bulk decision."}
-              </p>
-            )}
+        {approvalsQuery.isLoading && (
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-xl" />
+            ))}
           </div>
-        </section>
-      )}
-
-      <ul className="flex flex-col gap-2">
-        {approvals.map((approval, index) => (
-          <ApprovalRow
-            key={approval.id}
-            approval={approval}
-            plan={planQueries[index]?.data}
-            planLoading={planQueries[index]?.isLoading ?? false}
-            canManage={canManage}
-            selected={selected.has(approval.id)}
-            onToggleSelected={() => toggleSelected(approval.id)}
+        )}
+        {approvalsQuery.isError && (
+          <EmptyState title="Couldn't load approvals" description="Please try again." />
+        )}
+        {approvals.length === 0 && !approvalsQuery.isLoading && (
+          <EmptyState
+            icon={ClipboardCheck}
+            title="Nothing to review"
+            description="No approval requests match these filters."
           />
-        ))}
-      </ul>
-    </main>
+        )}
+
+        {canManage && status === "pending" && selected.size > 0 && (
+          <Card className="border-warning/30 bg-warning-muted/40 p-4">
+            <h2 className="mb-3 text-sm font-semibold">Bulk decide ({selected.size} selected)</h2>
+            <div className="flex flex-col gap-3">
+              <Select
+                value={bulkDecision}
+                onValueChange={(value) => {
+                  setBulkDecision(value as ApprovalDecisionType);
+                  setBulkHighRiskAck(false);
+                }}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="approve">Approve</SelectItem>
+                  <SelectItem value="request_changes">Request changes</SelectItem>
+                  <SelectItem value="reject">Reject</SelectItem>
+                </SelectContent>
+              </Select>
+              <textarea
+                value={bulkComments}
+                onChange={(event) => setBulkComments(event.target.value)}
+                placeholder="Comments (optional, applied to all)"
+                rows={2}
+                className="resize-none rounded-lg border border-input bg-card px-3 py-2 text-sm shadow-clay-inset placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              {bulkDecision === "approve" && selectedHasHighRisk && (
+                <label className="flex items-center gap-2 text-xs text-warning">
+                  <input
+                    type="checkbox"
+                    checked={bulkHighRiskAck}
+                    onChange={(event) => setBulkHighRiskAck(event.target.checked)}
+                    className="size-3.5 accent-warning"
+                  />
+                  One or more selected plans is high-risk — I&rsquo;ve reviewed them and want to
+                  approve.
+                </label>
+              )}
+              <Button className="w-fit" disabled={bulkDisabled} onClick={() => bulkMutation.mutate()}>
+                {bulkMutation.isPending ? "Submitting…" : `${bulkDecision.replace(/_/g, " ")} all`}
+              </Button>
+              {bulkMutation.isError && (
+                <p className="text-sm text-destructive">
+                  {bulkMutation.error instanceof ApiError
+                    ? bulkMutation.error.message
+                    : "Couldn't submit bulk decision."}
+                </p>
+              )}
+            </div>
+          </Card>
+        )}
+
+        <div className="flex flex-col gap-3">
+          {approvals.map((approval, index) => (
+            <ApprovalRow
+              key={approval.id}
+              approval={approval}
+              plan={planQueries[index]?.data}
+              planLoading={planQueries[index]?.isLoading ?? false}
+              canManage={canManage}
+              selected={selected.has(approval.id)}
+              onToggleSelected={() => toggleSelected(approval.id)}
+            />
+          ))}
+        </div>
+      </div>
+    </AppShell>
   );
 }

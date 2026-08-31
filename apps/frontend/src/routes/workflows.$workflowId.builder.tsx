@@ -1,10 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import type { WorkflowDraft, WorkflowNode, WorkflowNodeInput, WorkflowNodeType } from "@vault/types";
+import { ChevronLeft, Plus, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiClient } from "@/lib/api-client";
+import { nodeTypeLabel } from "@/lib/workflow-style";
 import { useAuthStore } from "@/stores/auth-store";
 
 export const Route = createFileRoute("/workflows/$workflowId/builder")({
@@ -16,7 +29,7 @@ export const Route = createFileRoute("/workflows/$workflowId/builder")({
   component: WorkflowBuilderPage,
 });
 
-const _NODE_TYPES: WorkflowNodeType[] = [
+const NODE_TYPES: WorkflowNodeType[] = [
   "trigger",
   "condition",
   "decision",
@@ -55,34 +68,41 @@ function WorkflowBuilderPage() {
   });
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
-      <Link to="/workflows/$workflowId" params={{ workflowId }} className="text-sm underline">
-        ← Back to workflow
-      </Link>
-      <h1 className="text-xl font-semibold">Workflow Builder</h1>
-      <p className="text-sm text-neutral-500">
-        Edits apply to the draft version only — nothing here affects what's currently published or
-        running until you publish again. Node graphs are edited as plain JSON this phase, not a
-        drag-and-drop canvas; use each node's <code>key</code> in another node's{" "}
-        <code>next_nodes</code> to link them (e.g. {"{"}"default": "that-node-key"{"}"}).
-      </p>
+    <AppShell title="Workflow Builder">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <Link
+          to="/workflows/$workflowId"
+          params={{ workflowId }}
+          className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" /> Back to workflow
+        </Link>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Workflow Builder</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Edits apply to the draft version only — nothing here affects what&rsquo;s currently
+            published or running until you publish again. Node graphs are edited as plain JSON
+            this phase, not a drag-and-drop canvas; use each node&rsquo;s <code>key</code> in
+            another node&rsquo;s <code>next_nodes</code> to link them (e.g.{" "}
+            {'{"default": "that-node-key"}'}).
+          </p>
+        </div>
 
-      {draftQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {draftQuery.isError && <p className="text-sm text-red-600">Couldn't load the draft.</p>}
+        {draftQuery.isLoading && <Skeleton className="h-64 rounded-2xl" />}
+        {draftQuery.isError && (
+          <p className="text-sm text-destructive">Couldn&rsquo;t load the draft.</p>
+        )}
 
-      {draftQuery.data && (
-        // Keyed by the version id so navigating to a different draft (or a
-        // background refetch producing a genuinely new draft) remounts this
-        // form with fresh initial state, instead of needing an effect to
-        // sync `draftQuery.data` into local state after the fact.
-        <BuilderForm
-          key={draftQuery.data.version.id}
-          workflowId={workflowId}
-          workflowVersionId={draftQuery.data.version.id}
-          initialNodes={draftQuery.data.nodes}
-        />
-      )}
-    </main>
+        {draftQuery.data && (
+          <BuilderForm
+            key={draftQuery.data.version.id}
+            workflowId={workflowId}
+            workflowVersionId={draftQuery.data.version.id}
+            initialNodes={draftQuery.data.nodes}
+          />
+        )}
+      </div>
+    </AppShell>
   );
 }
 
@@ -146,7 +166,6 @@ function BuilderForm({
   function handleSave() {
     setParseError(null);
     try {
-      // Validate JSON up front so a bad edit doesn't reach the API at all.
       for (const node of nodes) {
         JSON.parse(node.configText || "{}");
         JSON.parse(node.nextNodesText || "{}");
@@ -159,85 +178,83 @@ function BuilderForm({
   }
 
   return (
-    <>
-      <ul className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
+      <ul className="flex flex-col gap-3">
         {nodes.map((node) => (
-          <li
-            key={node.key}
-            className="flex flex-col gap-2 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
-          >
+          <Card key={node.key} className="flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between gap-2">
-              <span className="rounded bg-neutral-100 px-2 py-1 font-mono text-xs dark:bg-neutral-900">
-                {node.key}
-              </span>
+              <span className="rounded-md bg-secondary px-2 py-1 font-mono text-xs">{node.key}</span>
               <Button variant="ghost" size="sm" onClick={() => removeNode(node.key)}>
-                Remove
+                <Trash2 className="size-4" /> Remove
               </Button>
             </div>
             <div className="flex gap-2">
-              <select
+              <Select
                 value={node.node_type}
-                onChange={(event) =>
-                  updateNode(node.key, { node_type: event.target.value as WorkflowNodeType })
-                }
-                className="rounded-md border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950"
+                onValueChange={(value) => updateNode(node.key, { node_type: value as WorkflowNodeType })}
               >
-                {_NODE_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-              <input
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {NODE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {nodeTypeLabel(type)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
                 value={node.name}
                 onChange={(event) => updateNode(node.key, { name: event.target.value })}
                 placeholder="Node name"
-                className="flex-1 rounded-md border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950"
+                className="flex-1"
               />
             </div>
-            <label className="text-xs text-neutral-500">
+            <label className="text-xs text-muted-foreground">
               Config (JSON)
               <textarea
                 value={node.configText}
                 onChange={(event) => updateNode(node.key, { configText: event.target.value })}
                 rows={4}
-                className="mt-1 w-full rounded-md border border-neutral-200 px-3 py-2 font-mono text-xs dark:border-neutral-800 dark:bg-neutral-950"
+                className="mt-1 w-full resize-y rounded-lg border border-input bg-card px-3 py-2 font-mono text-xs shadow-clay-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
-            <label className="text-xs text-neutral-500">
+            <label className="text-xs text-muted-foreground">
               Next nodes (outcome → node key)
               <textarea
                 value={node.nextNodesText}
                 onChange={(event) => updateNode(node.key, { nextNodesText: event.target.value })}
                 rows={2}
-                className="mt-1 w-full rounded-md border border-neutral-200 px-3 py-2 font-mono text-xs dark:border-neutral-800 dark:bg-neutral-950"
+                className="mt-1 w-full resize-y rounded-lg border border-input bg-card px-3 py-2 font-mono text-xs shadow-clay-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
-          </li>
+          </Card>
         ))}
       </ul>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" onClick={addNode}>
-          Add node
+          <Plus className="size-4" /> Add node
         </Button>
         <Button disabled={saveMutation.isPending || nodes.length === 0} onClick={handleSave}>
+          <Save className="size-4" />
           {saveMutation.isPending ? "Saving…" : "Save draft"}
         </Button>
       </div>
-      {parseError && <p className="text-sm text-red-600">{parseError}</p>}
+      {parseError && <p className="text-sm text-destructive">{parseError}</p>}
       {saveMutation.isError && !parseError && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-destructive">
           {saveMutation.error instanceof ApiError
             ? saveMutation.error.message
             : "Couldn't save these nodes."}
         </p>
       )}
       {saveMutation.isSuccess && (
-        <p className="text-sm text-green-600">
+        <p className="text-sm text-success">
           Draft saved. Go back to the workflow page and publish when ready.
         </p>
       )}
-    </>
+    </div>
   );
 }

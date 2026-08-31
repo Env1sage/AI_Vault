@@ -66,6 +66,12 @@ Three tables use the same "at most one active row per natural key, full history 
 | `0007_recommendation_engine_tables` | 7 | `recommendations`, `recommendation_*`, `insight_records`, `dashboard_snapshots` |
 | `0008_execution_engine_tables` | 8 | `execution_*`, `rollback_records`, `approval_*` |
 | `0009_automation_engine_tables` | 9 | `workflow_*`, `scheduler_jobs`, `workflow_policies`, `notifications`, `automation_templates`; ALTERs `approval_requests`/`approval_decisions` for the policy-as-approver pattern |
+| `0010_file_web_view_link` | 10 | ALTERs `files` — adds `web_view_link` |
+| `0011_storage_intelligence_tables` | Storage Intelligence (ADR-023) | `storage_analysis_*`, `duplicate_groups`, `duplicate_group_members` |
+| `0012_execution_plan_duplicate_group_origin` | Storage Intelligence (ADR-023) | ALTERs `execution_plans` — adds `duplicate_group_id` origin |
+| `0013_execution_plan_ad_hoc_origin` | Storage Intelligence (ADR-023) | ALTERs `execution_plans`' origin check constraint for ad-hoc (file-list) plans |
+| `0014_file_intelligence_tables` | AI File Intelligence | `file_intelligence`, `intelligence_jobs`, `intelligence_progress`, `intelligence_events` |
+| `0015_conversation_message_tool_name` | AI Storage Assistant (ADR-024) | ALTERs `conversation_messages` — adds `tool_name` |
 
 Every migration has a full, tested `downgrade()` — used in practice during development at least once per phase from Phase 4 onward (the established "downgrade → fix → reapply" iteration pattern logged in this project's ADRs). No migration has ever been edited after being applied in a shared/CI environment; `0008`'s two-line whitespace fix in Phase 10 (wrapping overlong `op.create_index` calls) is the one cosmetic exception, made before this phase's own CI run, not after any real deployment.
 

@@ -13,7 +13,8 @@ class ExecutionPlanRepository:
         self,
         *,
         organization_id: uuid.UUID,
-        recommendation_id: uuid.UUID,
+        recommendation_id: uuid.UUID | None = None,
+        duplicate_group_id: uuid.UUID | None = None,
         created_by_user_id: uuid.UUID,
         target_provider: str,
         estimated_impact: str,
@@ -25,6 +26,7 @@ class ExecutionPlanRepository:
         plan = ExecutionPlan(
             organization_id=organization_id,
             recommendation_id=recommendation_id,
+            duplicate_group_id=duplicate_group_id,
             created_by_user_id=created_by_user_id,
             target_provider=target_provider,
             estimated_impact=estimated_impact,
@@ -77,6 +79,22 @@ class ExecutionPlanRepository:
             self._session.query(ExecutionPlan)
             .filter(
                 ExecutionPlan.recommendation_id == recommendation_id,
+                ExecutionPlan.status.in_(active_statuses),
+            )
+            .first()
+            is not None
+        )
+
+    def has_active_plan_for_duplicate_group(self, duplicate_group_id: uuid.UUID) -> bool:
+        active_statuses = [
+            ExecutionPlanStatus.PENDING_APPROVAL,
+            ExecutionPlanStatus.APPROVED,
+            ExecutionPlanStatus.EXECUTING,
+        ]
+        return (
+            self._session.query(ExecutionPlan)
+            .filter(
+                ExecutionPlan.duplicate_group_id == duplicate_group_id,
                 ExecutionPlan.status.in_(active_statuses),
             )
             .first()

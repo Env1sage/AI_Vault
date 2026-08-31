@@ -77,6 +77,8 @@ Status: **Reference document**, introduced in Phase 10. This is a navigable inde
 | POST | `/v1/conversations` |
 | POST | `/v1/conversations/{conversation_id}/messages` |
 
+The two `POST /v1/conversations*` routes ("Ask Vault") now branch internally (ADR-024): a question the deterministic intent classifier recognizes as a storage question (e.g. "How much storage am I using?") is answered from Storage Intelligence data directly via one of ten internal tools, never a semantic search over file content; every other question keeps the original retrieval path. Callers see no request-shape difference — the branch is entirely server-side. The response's `assistant_message.tool_name` field (`string | null`) records which tool answered a turn, `null` when the semantic-search path was used. `assistant_message.retrieval_method` is `"tool"` on a tool-answered turn, distinct from the pre-existing `"metadata"`/`"semantic"`/`"both"` values.
+
 ### Founder Command Center & Recommendation Engine (Phase 7, ADR-019)
 | Method | Path |
 |---|---|

@@ -25,7 +25,7 @@ _FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 _MAX_NAME_LENGTH = 1024
 _FILE_FIELDS = (
     "id,name,mimeType,parents,size,createdTime,modifiedTime,viewedByMeTime,"
-    "owners(emailAddress),shared,md5Checksum,headRevisionId,trashed"
+    "owners(emailAddress),shared,md5Checksum,headRevisionId,trashed,webViewLink"
 )
 
 
@@ -49,6 +49,7 @@ class DriveFile:
     version_id: str | None
     is_folder: bool
     trashed: bool
+    web_view_link: str | None = None
 
 
 @dataclass(frozen=True)
@@ -331,6 +332,21 @@ class GoogleDriveClient:
             # branch below: this one will never succeed on retry and must
             # not be treated as "Drive is unavailable" for the whole job.
             raise ForbiddenError(f"Google Drive denied content access to file {url}.")
+        if response.status_code == 403 and not content_access:
+            # Drive represents *both* a genuine permission denial and a rate
+            # limit as HTTP 403 (not just 429) — `error.errors[0].reason`
+            # is the only way to tell them apart. Only a real permission
+            # denial is permanent; an unrecognized or rate-limit reason
+            # falls through to the retryable branch below, which is the
+            # safe default (never silently drops a transient failure).
+            reason = _drive_error_reason(response)
+            rate_limit_reasons = (
+                "rateLimitExceeded",
+                "userRateLimitExceeded",
+                "dailyLimitExceeded",
+            )
+            if reason is not None and reason not in rate_limit_reasons:
+                raise ForbiddenError(f"Google Drive denied access ({reason}): {url}.")
         if response.status_code != 200:
             logger.warning(
                 "google_drive_request_failed",
@@ -358,7 +374,20 @@ class GoogleDriveClient:
             version_id=item.get("headRevisionId"),
             is_folder=item.get("mimeType") == _FOLDER_MIME_TYPE,
             trashed=bool(item.get("trashed", False)),
+            web_view_link=item.get("webViewLink"),
         )
+
+
+def _drive_error_reason(response: requests.Response) -> str | None:
+    """Best-effort read of Drive's `error.errors[0].reason` — safe to log
+    (a fixed enum-like string, e.g. "insufficientFilePermissions", never
+    request/token content), used only to tell a permanent permission denial
+    apart from a 403-shaped rate limit."""
+    try:
+        errors = response.json().get("error", {}).get("errors", [])
+    except ValueError:
+        return None
+    return errors[0].get("reason") if errors else None
 
 
 def _parse_time(value: str | None) -> datetime | None:

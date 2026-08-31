@@ -16,6 +16,7 @@ from vault_shared.db.models import (
 from vault_shared.db.repositories import (
     ApprovalRequestRepository,
     AuditLogRepository,
+    DuplicateGroupRepository,
     ExecutionAuditRepository,
     ExecutionPlanRepository,
     ExecutionStepRepository,
@@ -34,6 +35,16 @@ _EXECUTABLE_RULES: dict[str, str] = {
     "archive_candidates": ExecutionActionType.ARCHIVE,
     "large_unused_files": ExecutionActionType.ARCHIVE,
 }
+
+# Storage Intelligence's ad-hoc plans (large/old/inactive/temporary-
+# candidate listings, where the user picks specific files directly rather
+# than acting on a precomputed group) are deliberately restricted to
+# ARCHIVE only — Drive Trash, reversible, the same narrow allowlist
+# philosophy as `_EXECUTABLE_RULES` (ADR-020). MOVE/RENAME/UPDATE_METADATA
+# have no obvious "clean up this file" meaning here and stay unreachable
+# from this path.
+_AD_HOC_ALLOWED_ACTIONS = frozenset({ExecutionActionType.ARCHIVE})
+_MAX_AD_HOC_FILES = 500
 
 # Execution risk is a different question than the recommendation's own
 # risk_level (which describes the *business* risk of the underlying
@@ -70,6 +81,7 @@ class ExecutionPlanService:
     def __init__(self, db: Session) -> None:
         self._db = db
         self._recommendations = RecommendationRepository(db)
+        self._duplicate_groups = DuplicateGroupRepository(db)
         self._plans = ExecutionPlanRepository(db)
         self._steps = ExecutionStepRepository(db)
         self._approvals = ApprovalRequestRepository(db)
@@ -108,10 +120,114 @@ class ExecutionPlanService:
                 "stale. Refresh recommendations and try again."
             )
 
+        return self._create_plan_with_approval(
+            organization_id=organization_id,
+            user_id=user_id,
+            recommendation_id=recommendation_id,
+            duplicate_group_id=None,
+            action_type=action_type,
+            ordered_files=ordered_files,
+            audit_metadata={"recommendation_id": str(recommendation_id)},
+        )
+
+    def create_plan_from_duplicate_group(
+        self, duplicate_group_id: uuid.UUID, *, organization_id: uuid.UUID, user_id: uuid.UUID
+    ) -> ExecutionPlan:
+        """Storage Intelligence's (post-hardening) equivalent of `create_plan`
+        — a `DuplicateGroup` is already a concrete, content-verified set of
+        exact-duplicate files (ADR-023's checksum `GROUP BY`, not a
+        filename heuristic), so unlike a `Recommendation` there is no
+        rule-name allowlist to check: every duplicate group is executable
+        by construction. Only the non-`is_recommended_keep` members become
+        `REMOVE_DUPLICATE` steps — the recommended copy is always left
+        alone. See ADR-024."""
+        group = self._duplicate_groups.get_owned(
+            duplicate_group_id, organization_id=organization_id
+        )
+        if group is None:
+            raise NotFoundError("Duplicate group not found.")
+        if self._plans.has_active_plan_for_duplicate_group(duplicate_group_id):
+            raise ConflictError(
+                "An execution plan is already pending or in progress for this duplicate group."
+            )
+
+        members = self._duplicate_groups.list_members_with_files(duplicate_group_id)
+        ordered_files = [file for member, file in members if not member.is_recommended_keep]
+        if not ordered_files:
+            raise ValidationError(
+                "This duplicate group has no removable copies — it may be stale. "
+                "Re-analyze storage and try again."
+            )
+
+        return self._create_plan_with_approval(
+            organization_id=organization_id,
+            user_id=user_id,
+            recommendation_id=None,
+            duplicate_group_id=duplicate_group_id,
+            action_type=ExecutionActionType.REMOVE_DUPLICATE,
+            ordered_files=ordered_files,
+            audit_metadata={"duplicate_group_id": str(duplicate_group_id)},
+        )
+
+    def create_ad_hoc_plan(
+        self,
+        file_ids: list[uuid.UUID],
+        *,
+        action_type: str,
+        organization_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> ExecutionPlan:
+        """Storage Intelligence's large/old/inactive/temporary-candidate
+        listings are live queries, not precomputed groups (ADR-023) — there
+        is no `DuplicateGroup`-shaped row to originate a plan from, only the
+        set of file ids the user picked on that listing page. Restricted to
+        `ARCHIVE` (see `_AD_HOC_ALLOWED_ACTIONS`) and re-verifies every id
+        actually belongs to this organization via
+        `FileRepository.list_owned_by_organization` — unlike the other two
+        `create_plan*` methods, nothing upstream already guaranteed that
+        for a caller-supplied id list."""
+        if action_type not in _AD_HOC_ALLOWED_ACTIONS:
+            raise ValidationError(f"'{action_type}' is not a supported ad-hoc action.")
+        if not file_ids:
+            raise ValidationError("Select at least one file.")
+        if len(file_ids) > _MAX_AD_HOC_FILES:
+            raise ValidationError(f"Select at most {_MAX_AD_HOC_FILES} files at a time.")
+
+        ordered_files = self._files.list_owned_by_organization(
+            file_ids, organization_id=organization_id
+        )
+        if not ordered_files:
+            raise ValidationError(
+                "None of the selected files could be found — they may be stale. "
+                "Refresh and try again."
+            )
+
+        return self._create_plan_with_approval(
+            organization_id=organization_id,
+            user_id=user_id,
+            recommendation_id=None,
+            duplicate_group_id=None,
+            action_type=action_type,
+            ordered_files=ordered_files,
+            audit_metadata={"ad_hoc_action": action_type, "requested_file_count": len(file_ids)},
+        )
+
+    def _create_plan_with_approval(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        user_id: uuid.UUID,
+        recommendation_id: uuid.UUID | None,
+        duplicate_group_id: uuid.UUID | None,
+        action_type: str,
+        ordered_files: list[File],
+        audit_metadata: dict,
+    ) -> ExecutionPlan:
         total_bytes = sum(f.size_bytes or 0 for f in ordered_files)
         plan = self._plans.create(
             organization_id=organization_id,
             recommendation_id=recommendation_id,
+            duplicate_group_id=duplicate_group_id,
             created_by_user_id=user_id,
             target_provider="google_workspace",
             estimated_impact=f"{len(ordered_files)} files, ~{human_bytes(total_bytes)}",
@@ -144,10 +260,7 @@ class ExecutionPlanService:
             execution_plan_id=plan.id,
             actor_user_id=user_id,
             event_type="execution_plan_created",
-            metadata={
-                "recommendation_id": str(recommendation_id),
-                "step_count": len(ordered_files),
-            },
+            metadata={**audit_metadata, "step_count": len(ordered_files)},
         )
         self._audit_logs.record(
             event_type="execution_plan_created",

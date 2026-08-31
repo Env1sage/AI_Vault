@@ -15,4 +15,8 @@ describe("connectorStatusColor", () => {
     expect(connectorStatusColor("pending")).toBe("text-neutral-500");
     expect(connectorStatusColor("disconnected")).toBe("text-neutral-500");
   });
+
+  it("highlights a connector needing reauthorization in amber", () => {
+    expect(connectorStatusColor("reauth_required")).toBe("text-amber-600");
+  });
 });

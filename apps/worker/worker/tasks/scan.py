@@ -6,10 +6,16 @@ from sqlalchemy.orm import Session
 from vault_shared import DependencyUnavailableError, get_logger
 from vault_shared.connectors.google_drive import GoogleDriveClient
 from vault_shared.connectors.google_workspace import get_google_workspace_oauth_client
-from vault_shared.db.models import EnrichmentTrigger, ScanStatus, WorkflowEventType
+from vault_shared.db.models import (
+    EnrichmentTrigger,
+    ScanStatus,
+    StorageAnalysisTrigger,
+    WorkflowEventType,
+)
 from vault_shared.db.repositories import (
     EnrichmentJobRepository,
     ScanJobRepository,
+    StorageAnalysisJobRepository,
     StorageConnectorRepository,
 )
 from vault_shared.db.session import get_session_factory
@@ -17,6 +23,7 @@ from vault_shared.workflow_events import fire_workflow_event
 from worker.celery_app import celery_app
 from worker.scanner.scan_service import ScannerService
 from worker.tasks.enrichment import run_enrichment
+from worker.tasks.storage_intelligence import run_storage_intelligence
 
 logger = get_logger("worker.tasks.scan")
 
@@ -44,6 +51,7 @@ def run_scan(self: Task, scan_job_id: str) -> None:
         )
         service.run(uuid.UUID(scan_job_id))
         _enqueue_enrichment_if_scan_completed(session, scan_job_id)
+        _enqueue_storage_intelligence_if_scan_completed(session, scan_job_id)
         _fire_scan_completed_event(session, scan_job_id)
     except DependencyUnavailableError as exc:
         if self.request.retries >= self.max_retries:
@@ -92,6 +100,39 @@ def _enqueue_enrichment_if_scan_completed(session: Session, scan_job_id: str) ->
     )
     session.commit()
     run_enrichment.delay(str(enrichment_job.id))
+
+
+def _enqueue_storage_intelligence_if_scan_completed(session: Session, scan_job_id: str) -> None:
+    """Storage Intelligence (Phase 1) chains directly off scan completion —
+    a deliberate sibling of the enrichment chain above, not a successor of
+    it. Duplicate/storage-breakdown detection reads `File.checksum` and
+    other raw scan fields directly (see `DuplicateDetector`), never
+    Phase 5's enrichment-owned `duplicate_group_key`, so it has no real
+    dependency on enrichment/embedding/recommendation having run and
+    shouldn't wait behind them. `StorageAnalysisJob` is organization-
+    scoped (like `RecommendationJob`), not connector-scoped, so the
+    organization has to be resolved through the connector first — same
+    resolution `_fire_scan_completed_event` below already does."""
+    scan_jobs = ScanJobRepository(session)
+    scan_job = scan_jobs.get_by_id(uuid.UUID(scan_job_id))
+    if scan_job is None or scan_job.status != ScanStatus.COMPLETED:
+        return
+
+    connector = StorageConnectorRepository(session).get_by_id(scan_job.connector_id)
+    if connector is None:
+        return
+
+    storage_analysis_jobs = StorageAnalysisJobRepository(session)
+    if storage_analysis_jobs.has_active_job(connector.organization_id):
+        return
+
+    analysis_job = storage_analysis_jobs.create(
+        organization_id=connector.organization_id,
+        triggered_by=StorageAnalysisTrigger.SCAN_COMPLETED,
+        triggered_by_user_id=None,
+    )
+    session.commit()
+    run_storage_intelligence.delay(str(analysis_job.id))
 
 
 def _fire_scan_completed_event(session: Session, scan_job_id: str) -> None:

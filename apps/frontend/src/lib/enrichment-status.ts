@@ -18,3 +18,18 @@ export function enrichmentStatusColor(status: EnrichmentJobStatus): string {
 export function isActiveEnrichmentStatus(status: EnrichmentJobStatus): boolean {
   return status === "pending" || status === "running";
 }
+
+export function enrichmentStatusBadgeVariant(
+  status: EnrichmentJobStatus,
+): "success" | "destructive" | "primary" | "default" {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "destructive";
+    case "running":
+      return "primary";
+    default:
+      return "default";
+  }
+}

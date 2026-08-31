@@ -49,6 +49,7 @@ class CompletionResult:
 
 class CompletionProvider(Protocol):
     name: str
+    model_name: str
 
     def complete(
         self, *, messages: list[Message], context: str | None, max_tokens: int

@@ -1,3 +1,4 @@
+from vault_shared.db.models.ai_provider_config import AIProviderConfig
 from vault_shared.db.models.approval_decision import ApprovalDecision, ApprovalDecisionType
 from vault_shared.db.models.approval_request import ApprovalRequest, ApprovalStatus
 from vault_shared.db.models.audit_log import AuditLog
@@ -7,6 +8,8 @@ from vault_shared.db.models.connector_credentials import ConnectorCredentials
 from vault_shared.db.models.conversation import Conversation
 from vault_shared.db.models.conversation_message import ConversationMessage, MessageRole
 from vault_shared.db.models.dashboard_snapshot import DashboardSnapshot
+from vault_shared.db.models.duplicate_group import DuplicateGroup
+from vault_shared.db.models.duplicate_group_member import DuplicateGroupMember
 from vault_shared.db.models.embedding import Embedding
 from vault_shared.db.models.embedding_event import EmbeddingEvent
 from vault_shared.db.models.embedding_job import (
@@ -38,10 +41,18 @@ from vault_shared.db.models.execution_step import (
 from vault_shared.db.models.file import File
 from vault_shared.db.models.file_classification import FileClassification
 from vault_shared.db.models.file_extraction import ExtractionStatus, FileExtraction
+from vault_shared.db.models.file_intelligence import FileIntelligence, IntelligenceStatus
 from vault_shared.db.models.file_metadata import FileMetadata
 from vault_shared.db.models.file_relationship import FileRelationship, RelationshipType
 from vault_shared.db.models.folder import Folder
 from vault_shared.db.models.insight_record import InsightRecord
+from vault_shared.db.models.intelligence_event import IntelligenceEvent
+from vault_shared.db.models.intelligence_job import (
+    IntelligenceJob,
+    IntelligenceJobStatus,
+    IntelligenceTrigger,
+)
+from vault_shared.db.models.intelligence_progress import IntelligenceProgress
 from vault_shared.db.models.knowledge_attribute import KnowledgeAttribute
 from vault_shared.db.models.notification import (
     Notification,
@@ -69,6 +80,13 @@ from vault_shared.db.models.scan_job import ScanJob, ScanStatus, ScanType
 from vault_shared.db.models.scan_progress import ScanProgress
 from vault_shared.db.models.scheduler_job import SchedulerJob
 from vault_shared.db.models.search_session import SearchSession
+from vault_shared.db.models.storage_analysis_event import StorageAnalysisEvent
+from vault_shared.db.models.storage_analysis_job import (
+    StorageAnalysisJob,
+    StorageAnalysisJobStatus,
+    StorageAnalysisTrigger,
+)
+from vault_shared.db.models.storage_analysis_snapshot import StorageAnalysisSnapshot
 from vault_shared.db.models.storage_connector import (
     ConnectorProvider,
     ConnectorStatus,
@@ -96,6 +114,7 @@ from vault_shared.db.models.workflow_trigger import (
 from vault_shared.db.models.workflow_version import WorkflowVersion, WorkflowVersionStatus
 
 __all__ = [
+    "AIProviderConfig",
     "ApprovalDecision",
     "ApprovalDecisionType",
     "ApprovalRequest",
@@ -110,6 +129,8 @@ __all__ = [
     "ConversationMessage",
     "DashboardSnapshot",
     "DriveType",
+    "DuplicateGroup",
+    "DuplicateGroupMember",
     "Embedding",
     "EmbeddingEvent",
     "EmbeddingJob",
@@ -135,10 +156,17 @@ __all__ = [
     "File",
     "FileClassification",
     "FileExtraction",
+    "FileIntelligence",
     "FileMetadata",
     "FileRelationship",
     "Folder",
     "InsightRecord",
+    "IntelligenceEvent",
+    "IntelligenceJob",
+    "IntelligenceJobStatus",
+    "IntelligenceProgress",
+    "IntelligenceStatus",
+    "IntelligenceTrigger",
     "KnowledgeAttribute",
     "MessageRole",
     "Notification",
@@ -165,6 +193,11 @@ __all__ = [
     "ScanType",
     "SchedulerJob",
     "SearchSession",
+    "StorageAnalysisEvent",
+    "StorageAnalysisJob",
+    "StorageAnalysisJobStatus",
+    "StorageAnalysisSnapshot",
+    "StorageAnalysisTrigger",
     "StorageConnector",
     "StorageSource",
     "User",

@@ -174,6 +174,7 @@ def _provision_file(db: Session, *, connector_id: uuid.UUID, name: str, mime_typ
         permissions_summary=None,
         version_id=None,
         checksum=None,
+        web_view_link=None,
         provider_created_at=now,
         provider_modified_at=now,
         provider_viewed_at=None,

@@ -7,13 +7,18 @@ import pytest
 from app.application.auth_service import AuthService
 from app.application.conversation_service import ConversationService
 from app.infrastructure.auth.google_identity import GoogleUserInfo
+from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 from vault_shared import NotFoundError, get_settings
 from vault_shared.ai_gateway import AIGateway
-from vault_shared.ai_gateway.interfaces import EmbeddingResult
+from vault_shared.ai_gateway.interfaces import CompletionResult, EmbeddingResult
 from vault_shared.ai_gateway.providers import ExtractiveCompletionProvider
+from vault_shared.ai_gateway.providers.openai_compatible_completion_provider import (
+    OpenAICompatibleCompletionProvider,
+)
 from vault_shared.db.models import ConnectorProvider, DriveType
 from vault_shared.db.repositories import (
+    AIProviderConfigRepository,
     EmbeddingRepository,
     FileExtractionRepository,
     FileRepository,
@@ -21,6 +26,7 @@ from vault_shared.db.repositories import (
     StorageSourceRepository,
 )
 from vault_shared.db.session import get_session_factory
+from vault_shared.security.encryption import encrypt_token
 
 
 def _reachable(url: str) -> bool:
@@ -124,6 +130,7 @@ def _provision_embedded_file(
         permissions_summary=None,
         version_id=None,
         checksum=None,
+        web_view_link=None,
         provider_created_at=now,
         provider_modified_at=now,
         provider_viewed_at=None,
@@ -237,6 +244,63 @@ def test_a_follow_up_question_continues_the_same_conversation(db: Session) -> No
         first_turn.conversation.id, organization_id=user.organization_id, user_id=user.id
     )
     assert len(detail.messages) == 4
+
+
+@requires_infra
+def test_ask_uses_the_organizations_own_ai_provider_when_configured(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The regression guard for `AIGateway.with_completion_provider()` —
+    without it, an org's own key would be silently ignored whenever the
+    *global* gateway (constructed here wrapping the stub, exactly like an
+    instance with no `.env` completion config) is what `ConversationService`
+    was built with, since `_answer_with_search` reads whichever `ai_gateway`
+    `ask()` passes it, not `self._ai_gateway` directly."""
+    key = Fernet.generate_key().decode("utf-8")
+    monkeypatch.setenv("CONNECTOR_ENCRYPTION_KEY", key)
+    get_settings.cache_clear()
+
+    user = _provision_user(db)
+    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
+    _provision_embedded_file(
+        db, connector_id=connector.id, name="Payroll.pdf", text="Payroll figures for Q3."
+    )
+    AIProviderConfigRepository(db).upsert(
+        organization_id=user.organization_id,
+        api_key_encrypted=encrypt_token("sk-or-v1-org-key"),
+        model_name="z-ai/glm-5.2:free",
+    )
+    db.commit()
+
+    def _fake_complete(
+        self: OpenAICompatibleCompletionProvider, *, messages: object, context: object, max_tokens: int
+    ) -> CompletionResult:
+        return CompletionResult(
+            text="org-provider answer", provider=self.name, model_name=self.model_name, tokens_used=1
+        )
+
+    monkeypatch.setattr(OpenAICompatibleCompletionProvider, "complete", _fake_complete)
+
+    # The service is built with the GLOBAL gateway wrapping the stub — if
+    # the org's own provider is never resolved/rebound, `ask()` would fall
+    # through to the stub's deterministic answer instead.
+    global_gateway = AIGateway(
+        embedding_provider=_FixedVectorEmbeddingProvider([1.0, 0.0, 0.0, 0.0]),
+        completion_provider=ExtractiveCompletionProvider(),
+    )
+    service = ConversationService(db, ai_gateway=global_gateway)
+
+    turn = service.ask(
+        organization_id=user.organization_id,
+        user_id=user.id,
+        conversation_id=None,
+        question="What does the payroll file say?",
+    )
+
+    assert turn.assistant_message.provider == "openai_compatible"
+    assert turn.assistant_message.content == "org-provider answer"
+
+    get_settings.cache_clear()
 
 
 @requires_infra

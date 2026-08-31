@@ -17,32 +17,67 @@ export function categoryLabel(category: RecommendationCategory): string {
   }
 }
 
+/** Badge variant per category — deliberately restrained (Redesign brief §4:
+ * no rainbow dashboards). Security always reads as the destructive/danger
+ * tone since it's the one category that's never "just informational". */
+export function categoryBadgeVariant(
+  category: RecommendationCategory,
+): "primary" | "ai" | "destructive" | "warning" | "success" | "default" {
+  switch (category) {
+    case "storage_optimization":
+      return "primary";
+    case "knowledge_optimization":
+      return "ai";
+    case "security":
+      return "destructive";
+    case "collaboration":
+      return "warning";
+    case "productivity":
+      return "success";
+    default:
+      return "default";
+  }
+}
+
+/** @deprecated kept only for any lingering raw-class callers; prefer
+ * `categoryBadgeVariant` + `<Badge>`. */
 export function categoryColor(category: RecommendationCategory): string {
   switch (category) {
     case "storage_optimization":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300";
+      return "bg-primary/10 text-primary";
     case "knowledge_optimization":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300";
+      return "bg-ai-muted text-ai";
     case "security":
-      return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
+      return "bg-destructive-muted text-destructive";
     case "collaboration":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+      return "bg-warning-muted text-warning";
     case "productivity":
-      return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
+      return "bg-success-muted text-success";
     default:
-      return "bg-neutral-100 text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300";
+      return "bg-secondary text-secondary-foreground";
+  }
+}
+
+export function riskBadgeVariant(
+  risk: RecommendationRiskLevel,
+): "destructive" | "warning" | "default" {
+  switch (risk) {
+    case "high":
+      return "destructive";
+    case "medium":
+      return "warning";
+    default:
+      return "default";
   }
 }
 
 export function riskColor(risk: RecommendationRiskLevel): string {
   switch (risk) {
     case "high":
-      return "text-red-600";
+      return "text-destructive";
     case "medium":
-      return "text-amber-600";
-    case "low":
-      return "text-neutral-500";
+      return "text-warning";
     default:
-      return "text-neutral-500";
+      return "text-muted-foreground";
   }
 }

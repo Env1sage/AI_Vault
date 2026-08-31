@@ -24,9 +24,9 @@ export class ErrorBoundary extends Component<Props, State> {
   override render(): ReactNode {
     if (this.state.error) {
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center gap-2 p-6 text-center">
+        <div className="flex min-h-screen flex-col items-center justify-center gap-2 bg-background p-6 text-center text-foreground">
           <h1 className="text-lg font-semibold">Something went wrong.</h1>
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-muted-foreground">
             Please refresh the page. If this keeps happening, contact support.
           </p>
         </div>

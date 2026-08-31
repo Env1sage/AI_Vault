@@ -26,6 +26,12 @@ class ConnectorStatus(enum.StrEnum):
     CONNECTED = "connected"
     ERROR = "error"
     DISCONNECTED = "disconnected"
+    # Distinct from ERROR: the provider has definitively rejected the stored
+    # refresh token (Google's `invalid_grant`) — no retry or background
+    # refresh can ever recover this, only the user reconnecting can. `status`
+    # is a plain String(20) column (see class docstring), so this is a data
+    # value, not a migration.
+    REAUTH_REQUIRED = "reauth_required"
 
 
 class StorageConnector(Base):

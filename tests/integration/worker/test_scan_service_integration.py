@@ -6,10 +6,16 @@ from urllib.parse import urlparse
 
 import pytest
 from sqlalchemy.orm import Session
-from vault_shared import DependencyUnavailableError, get_settings
+from vault_shared import DependencyUnavailableError, ReauthRequiredError, get_settings
 from vault_shared.connectors.google_drive import DriveFile, DriveFilesPage, SharedDrive
 from vault_shared.connectors.google_workspace import GoogleAccountInfo, GoogleTokenSet
-from vault_shared.db.models import ConnectorProvider, RoleName, ScanStatus, ScanType
+from vault_shared.db.models import (
+    ConnectorProvider,
+    ConnectorStatus,
+    RoleName,
+    ScanStatus,
+    ScanType,
+)
 from vault_shared.db.repositories import (
     ConnectorCredentialsRepository,
     FileRepository,
@@ -147,7 +153,9 @@ def _folder(item_id: str, name: str, *, parent_id: str | None) -> DriveFile:
     )
 
 
-def _file(item_id: str, name: str, *, parent_id: str | None) -> DriveFile:
+def _file(
+    item_id: str, name: str, *, parent_id: str | None, web_view_link: str | None = None
+) -> DriveFile:
     return DriveFile(
         id=item_id,
         name=name,
@@ -163,6 +171,7 @@ def _file(item_id: str, name: str, *, parent_id: str | None) -> DriveFile:
         version_id="v1",
         is_folder=False,
         trashed=False,
+        web_view_link=web_view_link,
     )
 
 
@@ -300,6 +309,95 @@ def test_full_scan_resolves_hierarchy_even_when_child_arrives_before_parent(db: 
 
 
 @requires_infra
+def test_full_scan_persists_the_provider_web_view_link(db: Session) -> None:
+    """Step 5/8 of the V1 vertical slice: the File Explorer's "open the
+    provider file" affordance needs Drive's own `webViewLink`, not a URL we
+    construct ourselves — this proves it survives ingest onto `File.web_view_link`
+    unchanged."""
+    user = _provision_user(db)
+    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
+    job = _create_job(db, connector_id=connector.id)
+
+    link = "https://drive.google.com/file/d/file-q1/view?usp=drivesdk"
+    drive = _FakeGoogleDriveClient(
+        files_pages={
+            None: [
+                DriveFilesPage(
+                    files=[_file("file-q1", "Q1.pdf", parent_id=None, web_view_link=link)],
+                    next_page_token=None,
+                )
+            ]
+        }
+    )
+    service = ScannerService(db, drive_client=drive, oauth_client=_FakeGoogleWorkspaceOAuthClient())
+
+    service.run(job.id)
+
+    source = StorageSourceRepository(db).get_by_connector_and_provider_drive_id(
+        connector_id=connector.id, provider_drive_id="root"
+    )
+    file = FileRepository(db).get_by_source_and_provider_id(
+        storage_source_id=source.id, provider_file_id="file-q1"
+    )
+    assert file.web_view_link == link
+
+
+@requires_infra
+def test_full_scan_ingests_across_multiple_drive_api_pages(db: Session) -> None:
+    """Drive's files.list caps each response at a page size, so a source
+    with more items than fit on one page must be walked across successive
+    `nextPageToken` calls. Earlier tests only ever configure a single page
+    per source; this proves `_ingest_full`'s `while True` loop actually
+    follows `next_page_token` rather than stopping after the first page."""
+    user = _provision_user(db)
+    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
+    job = _create_job(db, connector_id=connector.id)
+
+    drive = _FakeGoogleDriveClient(
+        files_pages={
+            None: [
+                DriveFilesPage(
+                    files=[_folder("f-reports", "Reports", parent_id=None)],
+                    next_page_token="1",
+                ),
+                DriveFilesPage(
+                    files=[_file("file-q1", "Q1.pdf", parent_id="f-reports")],
+                    next_page_token="2",
+                ),
+                DriveFilesPage(
+                    files=[_file("file-q2", "Q2.pdf", parent_id="f-reports")],
+                    next_page_token=None,
+                ),
+            ]
+        }
+    )
+    service = ScannerService(db, drive_client=drive, oauth_client=_FakeGoogleWorkspaceOAuthClient())
+
+    service.run(job.id)
+
+    assert drive.list_files_page_calls == 3
+
+    completed_job = ScanJobRepository(db).get_by_id(job.id)
+    assert completed_job.status == ScanStatus.COMPLETED
+
+    source = StorageSourceRepository(db).get_by_connector_and_provider_drive_id(
+        connector_id=connector.id, provider_drive_id="root"
+    )
+    q1 = FileRepository(db).get_by_source_and_provider_id(
+        storage_source_id=source.id, provider_file_id="file-q1"
+    )
+    q2 = FileRepository(db).get_by_source_and_provider_id(
+        storage_source_id=source.id, provider_file_id="file-q2"
+    )
+    assert q1.path == "/Reports/Q1.pdf"
+    assert q2.path == "/Reports/Q2.pdf"
+
+    progress = ScanProgressRepository(db).get_for_job(job.id)
+    assert progress.folders_discovered == 1
+    assert progress.files_discovered == 2
+
+
+@requires_infra
 def test_cancellation_between_sources_stops_the_scan_cleanly(db: Session) -> None:
     user = _provision_user(db)
     connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
@@ -351,3 +449,56 @@ def test_dependency_unavailable_leaves_the_job_running_for_a_celery_level_retry(
 
     still_running_job = ScanJobRepository(db).get_by_id(job.id)
     assert still_running_job.status == ScanStatus.RUNNING
+
+
+@requires_infra
+def test_revoked_refresh_token_fails_the_scan_without_leaking_the_token(db: Session) -> None:
+    """A revoked/expired connector (Step 11 of the V1 vertical slice, and the
+    real-world root cause behind the "token refresh failed" scan blocker) —
+    the stored access token is already past expiry, forcing
+    `ConnectorTokenService` down its refresh path, and Google rejects the
+    refresh with `invalid_grant`. Unlike `DependencyUnavailableError`
+    (transient, retryable), this is a permanent auth failure: the job must
+    be marked FAILED outright — not left RUNNING for a Celery retry that can
+    never succeed — the connector itself must flip to REAUTH_REQUIRED (not
+    silently stay "connected" while every future scan keeps failing the
+    same way), and the persisted error must describe the failure without
+    ever containing the token itself."""
+    user = _provision_user(db)
+    connector = StorageConnectorRepository(db).upsert_connected(
+        organization_id=user.organization_id,
+        provider=ConnectorProvider.GOOGLE_WORKSPACE,
+        connected_by_user_id=user.id,
+        account_email="founder@acme.com",
+        workspace_domain="acme.com",
+    )
+    secret_refresh_token = "refresh-token-secret-value"
+    ConnectorCredentialsRepository(db).upsert(
+        connector_id=connector.id,
+        access_token_encrypted=encrypt_token("access-expired"),
+        refresh_token_encrypted=encrypt_token(secret_refresh_token),
+        granted_scopes="https://www.googleapis.com/auth/drive.readonly",
+        expires_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    db.commit()
+    job = _create_job(db, connector_id=connector.id)
+
+    class _RevokedOAuthClient(_FakeGoogleWorkspaceOAuthClient):
+        def refresh_access_token(self, *, refresh_token: str) -> GoogleTokenSet:
+            raise ReauthRequiredError(
+                "Google authorization has expired or was revoked. Reconnect Google Drive to continue."
+            )
+
+    service = ScannerService(
+        db, drive_client=_FakeGoogleDriveClient(), oauth_client=_RevokedOAuthClient()
+    )
+
+    service.run(job.id)
+
+    failed_job = ScanJobRepository(db).get_by_id(job.id)
+    assert failed_job.status == ScanStatus.FAILED
+    assert secret_refresh_token not in (failed_job.error or "")
+
+    failed_connector = StorageConnectorRepository(db).get_by_id(connector.id)
+    assert failed_connector.status == ConnectorStatus.REAUTH_REQUIRED
+    assert secret_refresh_token not in (failed_connector.last_error or "")

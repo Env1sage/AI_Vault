@@ -44,6 +44,7 @@ class File(Base):
     permissions_summary: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     version_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    web_view_link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
 
     provider_created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

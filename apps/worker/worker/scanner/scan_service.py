@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from vault_shared import DependencyUnavailableError, get_logger
+from vault_shared import DependencyUnavailableError, ReauthRequiredError, get_logger
 from vault_shared.connector_service import ConnectorTokenService
 from vault_shared.connectors.google_drive import DriveFile, GoogleDriveClient
 from vault_shared.connectors.google_workspace import GoogleWorkspaceOAuthClient
@@ -125,6 +125,21 @@ class ScannerService:
             logger.warning("scan_job_dependency_unavailable", extra={"scan_job_id": str(job.id)})
             self._db.rollback()
             raise
+        except ReauthRequiredError as exc:
+            # Permanent, not transient: Google has definitively rejected the
+            # stored refresh token (invalid_grant). Retrying — at any layer
+            # — can never succeed, so unlike DependencyUnavailableError this
+            # must not be left RUNNING for a Celery retry. The connector
+            # itself (not just this job) is flagged REAUTH_REQUIRED so the
+            # Storage Connections page reflects it immediately, without
+            # requiring the user to notice repeated scan failures first.
+            logger.warning("scan_job_reauth_required", extra={"scan_job_id": str(job.id)})
+            self._db.rollback()
+            self._jobs.mark_failed(job, error=str(exc))
+            self._connectors.mark_reauth_required(connector, error=str(exc))
+            self._events.record(scan_job_id=job.id, event_type="scan_failed", message=str(exc))
+            self._db.commit()
+            return
         except Exception as exc:  # noqa: BLE001 - job execution boundary must never crash the worker
             logger.exception("scan_job_failed", extra={"scan_job_id": str(job.id)})
             self._db.rollback()
@@ -294,6 +309,7 @@ class ScannerService:
                 permissions_summary="shared" if item.shared else None,
                 version_id=item.version_id,
                 checksum=item.checksum,
+                web_view_link=item.web_view_link,
                 provider_created_at=item.created_time,
                 provider_modified_at=item.modified_time,
                 provider_viewed_at=item.viewed_by_me_time,

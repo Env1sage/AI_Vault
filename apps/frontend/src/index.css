@@ -1,14 +1,242 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens (UI/UX redesign). Single source of truth for color,
+ * radius, and shadow — components reference these via Tailwind
+ * utilities (bg-primary, rounded-lg, shadow-clay, …), never raw hex
+ * values. Light palette lives on :root; dark overrides the same
+ * variable names under prefers-color-scheme, so every component that
+ * only ever uses the token utilities gets dark mode for free.
+ */
 :root {
   color-scheme: light dark;
+
+  --background: #faf9f7;
+  --foreground: #171a21;
+
+  --card: #ffffff;
+  --card-foreground: #171a21;
+  --popover: #ffffff;
+  --popover-foreground: #171a21;
+
+  --primary: #2554c7;
+  --primary-foreground: #f5f8ff;
+  --secondary: #eef0f3;
+  --secondary-foreground: #171a21;
+
+  --muted: #f0efec;
+  --muted-foreground: #6b7080;
+
+  --accent: #eef1ff;
+  --accent-foreground: #3c3a91;
+
+  /* AI / automation accent — distinct from the primary action blue so an
+     "Ask Vault" surface always reads as a different kind of thing than a
+     regular button. */
+  --ai: #6a5cd6;
+  --ai-foreground: #ffffff;
+  --ai-muted: #f2effb;
+
+  --success: #1f8f56;
+  --success-foreground: #ffffff;
+  --success-muted: #eaf6ef;
+  --warning: #b4740e;
+  --warning-foreground: #ffffff;
+  --warning-muted: #fbf1de;
+  --destructive: #c23b32;
+  --destructive-foreground: #ffffff;
+  --destructive-muted: #fbeceb;
+
+  --border: #e6e4df;
+  --input: #e0ded8;
+  --ring: #2554c7;
+
+  /* Sidebar is a deliberately separate palette (deep navy/charcoal) from
+     the off-white content area — the "familiar file explorer + premium
+     product" split the redesign brief asks for. */
+  --sidebar: #12151f;
+  --sidebar-foreground: #d6d9e3;
+  --sidebar-muted-foreground: #868ca3;
+  --sidebar-accent: #1c2030;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #22263380;
+  --sidebar-ring: #5b7fe0;
+
+  --radius: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0d0f16;
+    --foreground: #e7e9f0;
+
+    --card: #14161f;
+    --card-foreground: #e7e9f0;
+    --popover: #14161f;
+    --popover-foreground: #e7e9f0;
+
+    --primary: #6f93ef;
+    --primary-foreground: #0b1020;
+    --secondary: #1b1e29;
+    --secondary-foreground: #e7e9f0;
+
+    --muted: #1b1e29;
+    --muted-foreground: #9298ac;
+
+    --accent: #1c1e33;
+    --accent-foreground: #b9c0ff;
+
+    --ai: #9d90ff;
+    --ai-foreground: #0b1020;
+    --ai-muted: #1c1a33;
+
+    --success: #4ade9b;
+    --success-foreground: #06210f;
+    --success-muted: #12281d;
+    --warning: #eab155;
+    --warning-foreground: #241701;
+    --warning-muted: #2b2110;
+    --destructive: #ef6f66;
+    --destructive-foreground: #250705;
+    --destructive-muted: #2c1614;
+
+    --border: #262a38;
+    --input: #262a38;
+    --ring: #6f93ef;
+
+    --sidebar: #090b11;
+    --sidebar-foreground: #d6d9e3;
+    --sidebar-muted-foreground: #7d8296;
+    --sidebar-accent: #161927;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #1d212e;
+    --sidebar-ring: #6f93ef;
+  }
+}
+
+@theme {
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ai: var(--ai);
+  --color-ai-foreground: var(--ai-foreground);
+  --color-ai-muted: var(--ai-muted);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-muted: var(--warning-muted);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-muted: var(--destructive-muted);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 5px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 10px);
+
+  /* Soft claymorphism — a gentle raised-surface look used sparingly on
+     hero cards, the AI panel, and empty states (never on dense tables). */
+  --shadow-clay-sm: 0 1px 2px rgb(15 15 20 / 0.04), 0 1px 1px rgb(15 15 20 / 0.03);
+  --shadow-clay: 0 1px 2px rgb(15 15 20 / 0.05), 0 10px 28px -10px rgb(15 15 20 / 0.14),
+    inset 0 1px 0 rgb(255 255 255 / 0.5);
+  --shadow-clay-lg: 0 2px 4px rgb(15 15 20 / 0.06), 0 20px 48px -14px rgb(15 15 20 / 0.2),
+    inset 0 1px 0 rgb(255 255 255 / 0.45);
+  --shadow-clay-inset: inset 0 1px 3px rgb(15 15 20 / 0.09), inset 0 1px 0 rgb(255 255 255 / 0.35);
+
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  --animate-fade-in: fade-in 0.15s ease-out;
+  --animate-scale-in: scale-in 0.12s ease-out;
+  --animate-slide-in-right: slide-in-right 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
 }
 
 body {
   margin: 0;
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Visible, consistent keyboard focus everywhere (Handbook accessibility
+   pass) — Tailwind's default outline is fine, but this keeps the ring
+   color on-brand and never invisible against either surface. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

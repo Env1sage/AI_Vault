@@ -18,3 +18,18 @@ export function embeddingStatusColor(status: EmbeddingJobStatus): string {
 export function isActiveEmbeddingStatus(status: EmbeddingJobStatus): boolean {
   return status === "pending" || status === "running";
 }
+
+export function embeddingStatusBadgeVariant(
+  status: EmbeddingJobStatus,
+): "success" | "destructive" | "primary" | "default" {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "destructive";
+    case "running":
+      return "primary";
+    default:
+      return "default";
+  }
+}

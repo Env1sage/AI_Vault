@@ -1,10 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import type { ExecutionJob, ExecutionJobDetail } from "@vault/types";
+import { CheckCircle2, ChevronLeft, Pause, Play, XCircle } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell/app-shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiClient } from "@/lib/api-client";
-import { isActiveJobStatus, jobStatusColor } from "@/lib/execution-style";
+import { isActiveJobStatus, jobStatusBadgeVariant } from "@/lib/execution-style";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -54,123 +60,132 @@ function ExecutionJobDetailPage() {
   const anyActionError = cancelMutation.error ?? pauseMutation.error ?? resumeMutation.error;
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
-      <Link to="/execution-jobs" className="text-sm underline">
-        ← Back to Execution History
-      </Link>
+    <AppShell title="Execution job">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <Link
+          to="/execution-jobs"
+          className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" /> Back to Execution History
+        </Link>
 
-      {jobQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {jobQuery.isError && (
-        <p className="text-sm text-red-600">
-          Couldn't load this execution job — you may not have permission to view it.
-        </p>
-      )}
+        {jobQuery.isLoading && <Skeleton className="h-56 rounded-2xl" />}
+        {jobQuery.isError && (
+          <p className="text-sm text-destructive">
+            Couldn&rsquo;t load this execution job — you may not have permission to view it.
+          </p>
+        )}
 
-      {job && (
-        <>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className={`font-medium capitalize ${jobStatusColor(job.status)}`}>
-                {job.status.replace(/_/g, " ")}
-              </span>
-              {job.is_rollback && (
-                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-900">
-                  rollback job
-                </span>
-              )}
-            </div>
-            <h1 className="text-xl font-semibold">
-              {job.is_rollback ? "Rollback progress" : "Execution progress"}
-            </h1>
-            {job.error && <p className="mt-1 text-sm text-red-600">{job.error}</p>}
-            <Link
-              to="/execution-plans/$executionPlanId"
-              params={{ executionPlanId: job.execution_plan_id }}
-              className="text-sm underline"
-            >
-              view plan
-            </Link>
-          </div>
-
-          {canManage && isActiveJobStatus(job.status) && (
-            <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-              <h2 className="mb-3 font-medium">Controls</h2>
-              <div className="flex flex-wrap gap-2">
-                {job.status === "running" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={anyActionPending}
-                    onClick={() => pauseMutation.mutate()}
-                  >
-                    Pause
-                  </Button>
-                )}
-                {job.status === "paused" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={anyActionPending}
-                    onClick={() => resumeMutation.mutate()}
-                  >
-                    Resume
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={anyActionPending}
-                  onClick={() => cancelMutation.mutate()}
-                >
-                  Cancel
-                </Button>
+        {job && (
+          <>
+            <Card clay className="p-6">
+              <div className="flex items-center gap-2">
+                <Badge variant={jobStatusBadgeVariant(job.status)} className="capitalize">
+                  {job.status.replace(/_/g, " ")}
+                </Badge>
+                {job.is_rollback && <Badge variant="outline">rollback job</Badge>}
               </div>
-              {anyActionError && (
-                <p className="mt-2 text-sm text-red-600">
-                  {anyActionError instanceof ApiError
-                    ? anyActionError.message
-                    : "Couldn't update this job."}
-                </p>
-              )}
-            </section>
-          )}
+              <h1 className="mt-2 text-lg font-semibold">
+                {job.is_rollback ? "Rollback progress" : "Execution progress"}
+              </h1>
+              {job.error && <p className="mt-1 text-sm text-destructive">{job.error}</p>}
+              <Link
+                to="/execution-plans/$executionPlanId"
+                params={{ executionPlanId: job.execution_plan_id }}
+                className="text-sm text-primary hover:underline"
+              >
+                view plan
+              </Link>
+            </Card>
 
-          <section>
-            <h2 className="mb-3 font-medium">Timeline ({job.results.length} steps executed)</h2>
-            {job.results.length === 0 ? (
-              <p className="text-sm text-neutral-500">
-                No steps have executed yet for this job.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {job.results.map((result) => (
-                  <li
-                    key={result.id}
-                    className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span
-                        className={
-                          result.status === "success" ? "font-medium text-green-600" : "font-medium text-red-600"
-                        }
+            {canManage && isActiveJobStatus(job.status) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Controls</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {job.status === "running" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={anyActionPending}
+                        onClick={() => pauseMutation.mutate()}
                       >
-                        {result.status}
-                      </span>
-                      <span className="text-xs text-neutral-400">
-                        {formatRelativeTime(result.executed_at)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-neutral-500">
-                      verification: {result.verification_status}
+                        <Pause className="size-4" /> {pauseMutation.isPending ? "Pausing…" : "Pause"}
+                      </Button>
+                    )}
+                    {job.status === "paused" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={anyActionPending}
+                        onClick={() => resumeMutation.mutate()}
+                      >
+                        <Play className="size-4" /> {resumeMutation.isPending ? "Resuming…" : "Resume"}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={anyActionPending}
+                      onClick={() => cancelMutation.mutate()}
+                    >
+                      <XCircle className="size-4" /> {cancelMutation.isPending ? "Cancelling…" : "Cancel"}
+                    </Button>
+                  </div>
+                  {anyActionError && (
+                    <p className="mt-2 text-sm text-destructive">
+                      {anyActionError instanceof ApiError
+                        ? anyActionError.message
+                        : "Couldn't update this job."}
                     </p>
-                    {result.error && <p className="text-xs text-red-600">{result.error}</p>}
-                  </li>
-                ))}
-              </ul>
+                  )}
+                </CardContent>
+              </Card>
             )}
-          </section>
-        </>
-      )}
-    </main>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Timeline ({job.results.length} steps executed)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {job.results.length === 0 ? (
+                  <EmptyState title="No steps executed yet" description="Check back shortly." />
+                ) : (
+                  <ul className="flex flex-col divide-y divide-border">
+                    {job.results.map((result) => (
+                      <li key={result.id} className="flex flex-col gap-1 py-2.5 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <span
+                            className={`flex items-center gap-1.5 font-medium ${
+                              result.status === "success" ? "text-success" : "text-destructive"
+                            }`}
+                          >
+                            {result.status === "success" ? (
+                              <CheckCircle2 className="size-4" />
+                            ) : (
+                              <XCircle className="size-4" />
+                            )}
+                            {result.status}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatRelativeTime(result.executed_at)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          verification: {result.verification_status}
+                        </p>
+                        {result.error && <p className="text-xs text-destructive">{result.error}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </AppShell>
   );
 }

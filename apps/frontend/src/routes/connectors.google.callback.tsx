@@ -1,8 +1,10 @@
 import { Link, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
 import { LoadingScreen } from "@/components/loading-screen";
+import { Button } from "@/components/ui/button";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -56,12 +58,17 @@ function GoogleConnectorCallbackPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-3 p-8 text-center">
-      <h1 className="text-lg font-semibold">Couldn't connect Google Workspace</h1>
-      <p className="text-sm text-red-600">{errorMessage}</p>
-      <Link to="/storage-connections" className="text-sm underline">
-        Back to Storage Connections
-      </Link>
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
+      <div className="flex size-14 items-center justify-center rounded-2xl bg-destructive-muted text-destructive shadow-clay-sm">
+        <AlertTriangle className="size-7" />
+      </div>
+      <div>
+        <h1 className="text-lg font-semibold">Couldn&rsquo;t connect Google Workspace</h1>
+        <p className="mt-1 max-w-sm text-sm text-destructive">{errorMessage}</p>
+      </div>
+      <Button asChild variant="outline">
+        <Link to="/storage-connections">Back to Storage Connections</Link>
+      </Button>
     </main>
   );
 }

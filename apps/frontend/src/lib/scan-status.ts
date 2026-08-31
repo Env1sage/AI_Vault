@@ -18,3 +18,16 @@ export function scanStatusColor(status: ScanStatus): string {
 export function isActiveScanStatus(status: ScanStatus): boolean {
   return status === "pending" || status === "running";
 }
+
+export function scanStatusBadgeVariant(status: ScanStatus): "success" | "destructive" | "primary" | "default" {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "destructive";
+    case "running":
+      return "primary";
+    default:
+      return "default";
+  }
+}

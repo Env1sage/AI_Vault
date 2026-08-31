@@ -1,6 +1,6 @@
-import type { RetrievalMethod } from "@vault/types";
+import type { ConversationRetrievalMethod } from "@vault/types";
 
-export function retrievalMethodLabel(method: RetrievalMethod): string {
+export function retrievalMethodLabel(method: ConversationRetrievalMethod): string {
   switch (method) {
     case "metadata":
       return "Name match";
@@ -8,20 +8,26 @@ export function retrievalMethodLabel(method: RetrievalMethod): string {
       return "Semantic match";
     case "both":
       return "Name + semantic match";
+    case "tool":
+      return "Storage Assistant";
     default:
       return method;
   }
 }
 
-export function retrievalMethodColor(method: RetrievalMethod): string {
+export function retrievalMethodBadgeVariant(
+  method: ConversationRetrievalMethod,
+): "warning" | "ai" | "success" | "default" {
   switch (method) {
     case "metadata":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+      return "warning";
     case "semantic":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300";
+      return "ai";
     case "both":
-      return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
+      return "success";
+    case "tool":
+      return "ai";
     default:
-      return "bg-neutral-100 text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300";
+      return "default";
   }
 }

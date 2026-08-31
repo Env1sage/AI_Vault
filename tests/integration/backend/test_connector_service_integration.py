@@ -8,7 +8,12 @@ from app.application.auth_service import AuthService
 from app.application.connector_service import ConnectorService
 from app.infrastructure.auth.google_identity import GoogleUserInfo
 from sqlalchemy.orm import Session
-from vault_shared import ConflictError, UnauthorizedError, get_settings
+from vault_shared import (
+    ConflictError,
+    ReauthRequiredError,
+    UnauthorizedError,
+    get_settings,
+)
 from vault_shared.connectors.google_workspace import (
     GoogleAccountInfo,
     GoogleTokenSet,
@@ -225,6 +230,38 @@ def test_verify_marks_the_connector_error_when_the_provider_call_fails(db: Sessi
     verified = service.verify(connector, ip_address=None)
 
     assert verified.status == ConnectorStatus.ERROR
+    assert verified.last_error is not None
+
+
+@requires_infra
+def test_verify_marks_the_connector_reauth_required_on_a_revoked_refresh_token(db: Session) -> None:
+    """The exact real-world blocker this test guards against: a scan (or a
+    manual Verify) discovering the stored refresh token has been revoked
+    must flip the connector to REAUTH_REQUIRED — not the generic ERROR —
+    so the UI can offer a one-click reconnect instead of a raw error."""
+
+    class _RevokedOAuthClient(_FakeGoogleWorkspaceOAuthClient):
+        def refresh_access_token(self, *, refresh_token: str) -> GoogleTokenSet:
+            raise ReauthRequiredError("Google authorization has expired or was revoked.")
+
+    user = _provision_user(db)
+    oauth_client = _RevokedOAuthClient()
+    service = ConnectorService(db, oauth_client=oauth_client)
+    authorize_url = service.initiate_connect(organization_id=user.organization_id, user_id=user.id)
+    state = authorize_url.rsplit("state=", 1)[1]
+    connector = service.complete_connect(
+        code="auth-code", state=state, organization_id=user.organization_id, user_id=user.id, ip_address=None
+    )
+
+    # Force the stored token to look already-expired so `verify` takes the
+    # refresh path (where the revoked-token failure actually surfaces).
+    credentials = service._credentials.get_by_connector_id(connector.id)
+    credentials.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db.commit()
+
+    verified = service.verify(connector, ip_address=None)
+
+    assert verified.status == ConnectorStatus.REAUTH_REQUIRED
     assert verified.last_error is not None
 
 

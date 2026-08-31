@@ -1,13 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
-import type { Connector, EmbeddingJob, EnrichmentJob, ScanJob } from "@vault/types";
+import type { Connector, EmbeddingJob, EnrichmentJob, IntelligenceJob, ScanJob } from "@vault/types";
+import { Cloud } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell/app-shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiClient } from "@/lib/api-client";
-import { embeddingStatusColor, isActiveEmbeddingStatus } from "@/lib/embedding-status";
-import { enrichmentStatusColor, isActiveEnrichmentStatus } from "@/lib/enrichment-status";
+import { embeddingStatusBadgeVariant, isActiveEmbeddingStatus } from "@/lib/embedding-status";
+import { enrichmentStatusBadgeVariant, isActiveEnrichmentStatus } from "@/lib/enrichment-status";
 import { formatRelativeTime } from "@/lib/format-relative-time";
-import { isActiveScanStatus, scanStatusColor } from "@/lib/scan-status";
+import { intelligenceStatusBadgeVariant, isActiveIntelligenceStatus } from "@/lib/intelligence-status";
+import { isActiveScanStatus, scanStatusBadgeVariant } from "@/lib/scan-status";
 import { useAuthStore } from "@/stores/auth-store";
 
 export const Route = createFileRoute("/scans")({
@@ -53,8 +60,7 @@ function ScansPage() {
 
   const enrichmentQuery = useQuery({
     queryKey: ["enrichment", connector?.id],
-    queryFn: () =>
-      apiClient.get<EnrichmentJob[]>(`/v1/connectors/${connector?.id}/enrichment`),
+    queryFn: () => apiClient.get<EnrichmentJob[]>(`/v1/connectors/${connector?.id}/enrichment`),
     enabled: connector !== undefined,
     refetchInterval: (query) =>
       query.state.data?.some((job) => isActiveEnrichmentStatus(job.status)) ? 3000 : false,
@@ -90,6 +96,29 @@ function ScansPage() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["embedding", connector?.id] }),
   });
 
+  const intelligenceQuery = useQuery({
+    queryKey: ["intelligence", connector?.id],
+    queryFn: () =>
+      apiClient.get<IntelligenceJob[]>(`/v1/connectors/${connector?.id}/intelligence`),
+    enabled: connector !== undefined,
+    refetchInterval: (query) =>
+      query.state.data?.some((job) => isActiveIntelligenceStatus(job.status)) ? 3000 : false,
+  });
+
+  const startIntelligenceMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<IntelligenceJob>(`/v1/connectors/${connector?.id}/intelligence`),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ["intelligence", connector?.id] }),
+  });
+
+  const cancelIntelligenceMutation = useMutation({
+    mutationFn: (intelligenceJobId: string) =>
+      apiClient.post<IntelligenceJob>(`/v1/intelligence/${intelligenceJobId}/cancel`),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ["intelligence", connector?.id] }),
+  });
+
   const jobs = scansQuery.data ?? [];
   const activeJob = jobs.find((job) => isActiveScanStatus(job.status));
   const lastCompletedJob = jobs.find((job) => job.status === "completed");
@@ -102,252 +131,332 @@ function ScansPage() {
   const activeEmbeddingJob = embeddingJobs.find((job) => isActiveEmbeddingStatus(job.status));
   const lastCompletedEmbeddingJob = embeddingJobs.find((job) => job.status === "completed");
 
+  const intelligenceJobs = intelligenceQuery.data ?? [];
+  const activeIntelligenceJob = intelligenceJobs.find((job) =>
+    isActiveIntelligenceStatus(job.status),
+  );
+  const lastCompletedIntelligenceJob = intelligenceJobs.find((job) => job.status === "completed");
+
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
-      <Link to="/dashboard" className="text-sm underline">
-        ← Back to dashboard
-      </Link>
-      <h1 className="text-xl font-semibold">Scans</h1>
+    <AppShell title="Scans">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <h1 className="text-xl font-semibold tracking-tight">Scans</h1>
 
-      {connectorsQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {connectorsQuery.isError && (
-        <p className="text-sm text-red-600">Couldn't load storage connections.</p>
-      )}
+        {connectorsQuery.isLoading && <Skeleton className="h-32 rounded-2xl" />}
+        {connectorsQuery.isError && (
+          <EmptyState title="Couldn't load storage connections" description="Please try again." />
+        )}
 
-      {!connectorsQuery.isLoading && connector === undefined && (
-        <p className="text-sm text-neutral-500">
-          Connect Google Workspace first — see{" "}
-          <Link to="/storage-connections" className="underline">
-            Storage Connections
-          </Link>
-          .
-        </p>
-      )}
+        {!connectorsQuery.isLoading && connector === undefined && (
+          <EmptyState
+            icon={Cloud}
+            title="No storage connected yet"
+            description="Connect Google Workspace to start scanning."
+            action={
+              <Button asChild>
+                <Link to="/storage-connections">Connect Google Drive</Link>
+              </Button>
+            }
+          />
+        )}
 
-      {connector && (
-        <>
-          <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="mb-3 font-medium">Current status</h2>
-
-            {activeJob ? (
-              <div className="flex flex-col gap-2 text-sm">
-                <p>
-                  <span className={`font-medium capitalize ${scanStatusColor(activeJob.status)}`}>
-                    {activeJob.status}
-                  </span>
-                  {activeJob.progress?.current_source_name
-                    ? ` — scanning ${activeJob.progress.current_source_name}`
-                    : ""}
-                </p>
-                {activeJob.progress && (
-                  <p className="text-neutral-500">
-                    {activeJob.progress.sources_completed}/{activeJob.progress.sources_discovered}{" "}
-                    sources · {activeJob.progress.folders_discovered} folders ·{" "}
-                    {activeJob.progress.files_discovered} files
-                  </p>
-                )}
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-fit"
-                    disabled={cancelMutation.isPending}
-                    onClick={() => cancelMutation.mutate(activeJob.id)}
-                  >
-                    {cancelMutation.isPending ? "Cancelling…" : "Cancel scan"}
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 text-sm">
-                <p className="text-neutral-500">
-                  {lastCompletedJob
-                    ? `Last successful scan: ${formatRelativeTime(lastCompletedJob.completed_at ?? lastCompletedJob.created_at)}`
-                    : "No scans yet."}
-                </p>
-                {canManage && (
-                  <Button
-                    className="w-fit"
-                    disabled={startMutation.isPending}
-                    onClick={() => startMutation.mutate()}
-                  >
-                    {startMutation.isPending ? "Starting…" : "Start scan"}
-                  </Button>
-                )}
-                {startMutation.isError && (
-                  <p className="text-sm text-red-600">Couldn't start a scan. Please try again.</p>
-                )}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <h2 className="mb-3 font-medium">Scan history</h2>
-            {scansQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-            {scansQuery.isError && (
-              <p className="text-sm text-red-600">Couldn't load scan history.</p>
-            )}
-            {jobs.length === 0 && !scansQuery.isLoading && (
-              <p className="text-sm text-neutral-500">No scans have run yet.</p>
-            )}
-            <ul className="flex flex-col gap-2">
-              {jobs.map((job) => (
-                <li
-                  key={job.id}
-                  className="flex items-center justify-between rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800"
-                >
-                  <div>
-                    <span className={`font-medium capitalize ${scanStatusColor(job.status)}`}>
-                      {job.status}
-                    </span>
-                    <span className="ml-2 text-neutral-500">{job.scan_type}</span>
-                    {job.error && <p className="mt-1 text-red-600">{job.error}</p>}
+        {connector && (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Current status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {activeJob ? (
+                  <div className="flex flex-col gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={scanStatusBadgeVariant(activeJob.status)} className="capitalize">
+                        {activeJob.status}
+                      </Badge>
+                      {activeJob.progress?.current_source_name && (
+                        <span className="text-muted-foreground">
+                          scanning {activeJob.progress.current_source_name}
+                        </span>
+                      )}
+                    </div>
+                    {activeJob.progress && (
+                      <p className="text-muted-foreground">
+                        {activeJob.progress.sources_completed}/{activeJob.progress.sources_discovered}{" "}
+                        sources · {activeJob.progress.folders_discovered} folders ·{" "}
+                        {activeJob.progress.files_discovered} files
+                      </p>
+                    )}
+                    {canManage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        disabled={cancelMutation.isPending}
+                        onClick={() => cancelMutation.mutate(activeJob.id)}
+                      >
+                        {cancelMutation.isPending ? "Cancelling…" : "Cancel scan"}
+                      </Button>
+                    )}
                   </div>
-                  <span className="text-neutral-400">{formatRelativeTime(job.created_at)}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
+                ) : (
+                  <div className="flex flex-col gap-3 text-sm">
+                    <p className="text-muted-foreground">
+                      {lastCompletedJob
+                        ? `Last successful scan: ${formatRelativeTime(lastCompletedJob.completed_at ?? lastCompletedJob.created_at)}`
+                        : "No scans yet."}
+                    </p>
+                    {canManage && (
+                      <Button
+                        className="w-fit"
+                        disabled={startMutation.isPending}
+                        onClick={() => startMutation.mutate()}
+                      >
+                        {startMutation.isPending ? "Starting…" : "Start scan"}
+                      </Button>
+                    )}
+                    {startMutation.isError && (
+                      <p className="text-sm text-destructive">Couldn&rsquo;t start a scan. Please try again.</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-medium">Enrichment</h2>
-              <Link to="/files" className="text-sm underline">
-                Browse files
-              </Link>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Scan history</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {scansQuery.isLoading && <Skeleton className="h-4 w-32" />}
+                {scansQuery.isError && <p className="text-sm text-destructive">Couldn&rsquo;t load scan history.</p>}
+                {jobs.length === 0 && !scansQuery.isLoading && (
+                  <p className="text-sm text-muted-foreground">No scans have run yet.</p>
+                )}
+                <ul className="flex flex-col divide-y divide-border">
+                  {jobs.map((job) => (
+                    <li key={job.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                      <div>
+                        <Badge variant={scanStatusBadgeVariant(job.status)} className="capitalize">
+                          {job.status}
+                        </Badge>
+                        <span className="ml-2 text-muted-foreground">{job.scan_type}</span>
+                        {job.error && <p className="mt-1 text-destructive">{job.error}</p>}
+                      </div>
+                      <span className="text-xs text-muted-foreground">{formatRelativeTime(job.created_at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
 
-            {activeEnrichmentJob ? (
-              <div className="flex flex-col gap-2 text-sm">
-                <p>
-                  <span
-                    className={`font-medium capitalize ${enrichmentStatusColor(activeEnrichmentJob.status)}`}
-                  >
-                    {activeEnrichmentJob.status}
-                  </span>
-                  {activeEnrichmentJob.progress?.current_file_name
-                    ? ` — enriching ${activeEnrichmentJob.progress.current_file_name}`
-                    : ""}
-                </p>
-                {activeEnrichmentJob.progress && (
-                  <p className="text-neutral-500">
-                    {activeEnrichmentJob.progress.files_processed}/
-                    {activeEnrichmentJob.progress.files_pending} files ·{" "}
-                    {activeEnrichmentJob.progress.files_failed} failed
-                  </p>
+            <Card>
+              <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+                <CardTitle>Enrichment</CardTitle>
+                <Link to="/files" className="text-xs font-medium text-primary hover:underline">
+                  Browse files
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {activeEnrichmentJob ? (
+                  <div className="flex flex-col gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={enrichmentStatusBadgeVariant(activeEnrichmentJob.status)}
+                        className="capitalize"
+                      >
+                        {activeEnrichmentJob.status}
+                      </Badge>
+                      {activeEnrichmentJob.progress?.current_file_name && (
+                        <span className="text-muted-foreground">
+                          enriching {activeEnrichmentJob.progress.current_file_name}
+                        </span>
+                      )}
+                    </div>
+                    {activeEnrichmentJob.progress && (
+                      <p className="text-muted-foreground">
+                        {activeEnrichmentJob.progress.files_processed}/
+                        {activeEnrichmentJob.progress.files_pending} files ·{" "}
+                        {activeEnrichmentJob.progress.files_failed} failed
+                      </p>
+                    )}
+                    {canManage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        disabled={cancelEnrichmentMutation.isPending}
+                        onClick={() => cancelEnrichmentMutation.mutate(activeEnrichmentJob.id)}
+                      >
+                        {cancelEnrichmentMutation.isPending ? "Cancelling…" : "Cancel enrichment"}
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 text-sm">
+                    <p className="text-muted-foreground">
+                      {lastCompletedEnrichmentJob
+                        ? `Last enrichment: ${formatRelativeTime(lastCompletedEnrichmentJob.completed_at ?? lastCompletedEnrichmentJob.created_at)}`
+                        : "No enrichment has run yet."}
+                    </p>
+                    {canManage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        disabled={startEnrichmentMutation.isPending}
+                        onClick={() => startEnrichmentMutation.mutate()}
+                      >
+                        {startEnrichmentMutation.isPending ? "Starting…" : "Re-run enrichment"}
+                      </Button>
+                    )}
+                    {startEnrichmentMutation.isError && (
+                      <p className="text-sm text-destructive">Couldn&rsquo;t start enrichment. Please try again.</p>
+                    )}
+                  </div>
                 )}
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-fit"
-                    disabled={cancelEnrichmentMutation.isPending}
-                    onClick={() => cancelEnrichmentMutation.mutate(activeEnrichmentJob.id)}
-                  >
-                    {cancelEnrichmentMutation.isPending ? "Cancelling…" : "Cancel enrichment"}
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 text-sm">
-                <p className="text-neutral-500">
-                  {lastCompletedEnrichmentJob
-                    ? `Last enrichment: ${formatRelativeTime(
-                        lastCompletedEnrichmentJob.completed_at ??
-                          lastCompletedEnrichmentJob.created_at,
-                      )}`
-                    : "No enrichment has run yet."}
-                </p>
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-fit"
-                    disabled={startEnrichmentMutation.isPending}
-                    onClick={() => startEnrichmentMutation.mutate()}
-                  >
-                    {startEnrichmentMutation.isPending ? "Starting…" : "Re-run enrichment"}
-                  </Button>
-                )}
-                {startEnrichmentMutation.isError && (
-                  <p className="text-sm text-red-600">
-                    Couldn't start enrichment. Please try again.
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
+              </CardContent>
+            </Card>
 
-          <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-medium">Embedding</h2>
-              <Link to="/search" className="text-sm underline">
-                Search
-              </Link>
-            </div>
+            <Card>
+              <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+                <CardTitle>Embedding</CardTitle>
+                <Link to="/search" className="text-xs font-medium text-primary hover:underline">
+                  Search
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {activeEmbeddingJob ? (
+                  <div className="flex flex-col gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={embeddingStatusBadgeVariant(activeEmbeddingJob.status)}
+                        className="capitalize"
+                      >
+                        {activeEmbeddingJob.status}
+                      </Badge>
+                      {activeEmbeddingJob.progress?.current_file_name && (
+                        <span className="text-muted-foreground">
+                          embedding {activeEmbeddingJob.progress.current_file_name}
+                        </span>
+                      )}
+                    </div>
+                    {activeEmbeddingJob.progress && (
+                      <p className="text-muted-foreground">
+                        {activeEmbeddingJob.progress.files_processed}/
+                        {activeEmbeddingJob.progress.files_pending} files ·{" "}
+                        {activeEmbeddingJob.progress.files_failed} failed
+                      </p>
+                    )}
+                    {canManage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        disabled={cancelEmbeddingMutation.isPending}
+                        onClick={() => cancelEmbeddingMutation.mutate(activeEmbeddingJob.id)}
+                      >
+                        {cancelEmbeddingMutation.isPending ? "Cancelling…" : "Cancel embedding"}
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 text-sm">
+                    <p className="text-muted-foreground">
+                      {lastCompletedEmbeddingJob
+                        ? `Last embedding run: ${formatRelativeTime(lastCompletedEmbeddingJob.completed_at ?? lastCompletedEmbeddingJob.created_at)}`
+                        : "No embedding run yet."}
+                    </p>
+                    {canManage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        disabled={startEmbeddingMutation.isPending}
+                        onClick={() => startEmbeddingMutation.mutate()}
+                      >
+                        {startEmbeddingMutation.isPending ? "Starting…" : "Re-run embedding"}
+                      </Button>
+                    )}
+                    {startEmbeddingMutation.isError && (
+                      <p className="text-sm text-destructive">Couldn&rsquo;t start embedding. Please try again.</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-            {activeEmbeddingJob ? (
-              <div className="flex flex-col gap-2 text-sm">
-                <p>
-                  <span
-                    className={`font-medium capitalize ${embeddingStatusColor(activeEmbeddingJob.status)}`}
-                  >
-                    {activeEmbeddingJob.status}
-                  </span>
-                  {activeEmbeddingJob.progress?.current_file_name
-                    ? ` — embedding ${activeEmbeddingJob.progress.current_file_name}`
-                    : ""}
-                </p>
-                {activeEmbeddingJob.progress && (
-                  <p className="text-neutral-500">
-                    {activeEmbeddingJob.progress.files_processed}/
-                    {activeEmbeddingJob.progress.files_pending} files ·{" "}
-                    {activeEmbeddingJob.progress.files_failed} failed
-                  </p>
+            <Card>
+              <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+                <CardTitle>AI Intelligence</CardTitle>
+                <Link to="/files" className="text-xs font-medium text-primary hover:underline">
+                  Browse files
+                </Link>
+              </CardHeader>
+              <CardContent>
+                {activeIntelligenceJob ? (
+                  <div className="flex flex-col gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={intelligenceStatusBadgeVariant(activeIntelligenceJob.status)}
+                        className="capitalize"
+                      >
+                        {activeIntelligenceJob.status}
+                      </Badge>
+                      {activeIntelligenceJob.progress?.current_file_name && (
+                        <span className="text-muted-foreground">
+                          analyzing {activeIntelligenceJob.progress.current_file_name}
+                        </span>
+                      )}
+                    </div>
+                    {activeIntelligenceJob.progress && (
+                      <p className="text-muted-foreground">
+                        {activeIntelligenceJob.progress.files_processed}/
+                        {activeIntelligenceJob.progress.files_pending} files ·{" "}
+                        {activeIntelligenceJob.progress.files_failed} failed
+                      </p>
+                    )}
+                    {canManage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        disabled={cancelIntelligenceMutation.isPending}
+                        onClick={() => cancelIntelligenceMutation.mutate(activeIntelligenceJob.id)}
+                      >
+                        {cancelIntelligenceMutation.isPending ? "Cancelling…" : "Cancel analysis"}
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 text-sm">
+                    <p className="text-muted-foreground">
+                      {lastCompletedIntelligenceJob
+                        ? `Last analysis: ${formatRelativeTime(lastCompletedIntelligenceJob.completed_at ?? lastCompletedIntelligenceJob.created_at)}`
+                        : "No AI analysis has run yet."}
+                    </p>
+                    {canManage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        disabled={startIntelligenceMutation.isPending}
+                        onClick={() => startIntelligenceMutation.mutate()}
+                      >
+                        {startIntelligenceMutation.isPending ? "Starting…" : "Re-run analysis"}
+                      </Button>
+                    )}
+                    {startIntelligenceMutation.isError && (
+                      <p className="text-sm text-destructive">
+                        Couldn&rsquo;t start AI analysis. Please try again.
+                      </p>
+                    )}
+                  </div>
                 )}
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-fit"
-                    disabled={cancelEmbeddingMutation.isPending}
-                    onClick={() => cancelEmbeddingMutation.mutate(activeEmbeddingJob.id)}
-                  >
-                    {cancelEmbeddingMutation.isPending ? "Cancelling…" : "Cancel embedding"}
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 text-sm">
-                <p className="text-neutral-500">
-                  {lastCompletedEmbeddingJob
-                    ? `Last embedding run: ${formatRelativeTime(
-                        lastCompletedEmbeddingJob.completed_at ??
-                          lastCompletedEmbeddingJob.created_at,
-                      )}`
-                    : "No embedding run yet."}
-                </p>
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-fit"
-                    disabled={startEmbeddingMutation.isPending}
-                    onClick={() => startEmbeddingMutation.mutate()}
-                  >
-                    {startEmbeddingMutation.isPending ? "Starting…" : "Re-run embedding"}
-                  </Button>
-                )}
-                {startEmbeddingMutation.isError && (
-                  <p className="text-sm text-red-600">
-                    Couldn't start embedding. Please try again.
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-        </>
-      )}
-    </main>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </AppShell>
   );
 }

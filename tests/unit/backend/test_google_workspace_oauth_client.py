@@ -3,7 +3,11 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 import requests
-from vault_shared import DependencyUnavailableError, UnauthorizedError
+from vault_shared import (
+    DependencyUnavailableError,
+    ReauthRequiredError,
+    UnauthorizedError,
+)
 from vault_shared.connectors.google_workspace import GoogleWorkspaceOAuthClient
 
 
@@ -83,12 +87,42 @@ class TestRefreshAccessToken:
         assert token_set.access_token == "new-access"
         assert token_set.refresh_token == "original-refresh"
 
-    def test_raises_unauthorized_when_the_refresh_token_is_invalid(self) -> None:
+    def test_raises_reauth_required_when_google_reports_invalid_grant(self) -> None:
+        """The real-world root cause of a "token refresh failed" scan
+        blocker: a revoked/expired refresh token — Google's authoritative
+        `invalid_grant` response — must be classified distinctly from a
+        transient or misconfigured auth failure, since only this one is
+        permanent and needs a user-facing reconnect action."""
         with (
-            patch("requests.post", return_value=_response(400, {"error": "invalid_grant"})),
-            pytest.raises(UnauthorizedError),
+            patch(
+                "requests.post",
+                return_value=_response(
+                    400, {"error": "invalid_grant", "error_description": "Token has been expired or revoked."}
+                ),
+            ),
+            pytest.raises(ReauthRequiredError),
         ):
             _client().refresh_access_token(refresh_token="revoked-token")
+
+    def test_raises_plain_unauthorized_for_a_non_invalid_grant_refresh_failure(self) -> None:
+        """A different Google error (e.g. a misconfigured client) must NOT
+        be misclassified as "needs reconnect" — reconnecting wouldn't fix a
+        client_id/secret problem, so it stays a generic auth failure."""
+        with (
+            patch("requests.post", return_value=_response(400, {"error": "unauthorized_client"})),
+            pytest.raises(UnauthorizedError) as exc_info,
+        ):
+            _client().refresh_access_token(refresh_token="some-token")
+        assert not isinstance(exc_info.value, ReauthRequiredError)
+
+    def test_raises_unauthorized_on_a_malformed_200_response(self) -> None:
+        """Google returning 200 with no `access_token` field must not leak a
+        raw KeyError past this boundary."""
+        with (
+            patch("requests.post", return_value=_response(200, {"expires_in": 3600})),
+            pytest.raises(UnauthorizedError),
+        ):
+            _client().refresh_access_token(refresh_token="some-token")
 
 
 class TestFetchAccountInfo:

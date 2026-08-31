@@ -8,6 +8,7 @@ from vault_shared.db.models import (
     File,
     FileClassification,
     FileExtraction,
+    FileIntelligence,
     FileMetadata,
     FileRelationship,
     KnowledgeAttribute,
@@ -15,6 +16,7 @@ from vault_shared.db.models import (
 from vault_shared.db.repositories import (
     FileClassificationRepository,
     FileExtractionRepository,
+    FileIntelligenceRepository,
     FileMetadataRepository,
     FileRelationshipRepository,
     FileRepository,
@@ -35,6 +37,7 @@ class FileDetail:
     metadata: FileMetadata | None
     classification: FileClassification | None
     extraction: FileExtraction | None
+    intelligence: FileIntelligence | None
     knowledge_attributes: list[KnowledgeAttribute]
     related_files: list[RelatedFile]
 
@@ -52,6 +55,7 @@ class FileService:
         self._file_metadata = FileMetadataRepository(db)
         self._classifications = FileClassificationRepository(db)
         self._extractions = FileExtractionRepository(db)
+        self._intelligence = FileIntelligenceRepository(db)
         self._knowledge_attributes = KnowledgeAttributeRepository(db)
         self._relationships = FileRelationshipRepository(db)
 
@@ -89,6 +93,7 @@ class FileService:
             metadata=self._file_metadata.get_by_file_id(file.id),
             classification=self._classifications.get_by_file_id(file.id),
             extraction=self._extractions.get_by_file_id(file.id),
+            intelligence=self._intelligence.get_by_file_id(file.id),
             knowledge_attributes=self._knowledge_attributes.list_for_file(file.id),
             related_files=related_files,
         )

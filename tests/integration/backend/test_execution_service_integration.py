@@ -23,6 +23,7 @@ from vault_shared.db.models import (
 from vault_shared.db.repositories import (
     ApprovalRequestRepository,
     ConnectorCredentialsRepository,
+    DuplicateGroupRepository,
     ExecutionJobRepository,
     ExecutionPlanRepository,
     ExecutionStepRepository,
@@ -30,6 +31,7 @@ from vault_shared.db.repositories import (
     RecommendationJobRepository,
     RecommendationRepository,
     RollbackRecordRepository,
+    StorageAnalysisJobRepository,
     StorageConnectorRepository,
     StorageSourceRepository,
 )
@@ -121,6 +123,7 @@ def _provision_file(db: Session, *, connector_id: uuid.UUID, name: str, provider
         permissions_summary=None,
         version_id=None,
         checksum=None,
+        web_view_link=None,
         provider_created_at=now,
         provider_modified_at=now,
         provider_viewed_at=None,
@@ -269,6 +272,194 @@ def test_create_plan_computes_high_risk_for_many_files(db: Session) -> None:
     plan = service.create_plan(recommendation.id, organization_id=user.organization_id, user_id=user.id)
 
     assert plan.risk_level == "high"
+
+
+def _provision_duplicate_group(
+    db: Session, *, organization_id: uuid.UUID, keep_file, other_files: list
+):
+    analysis_job = StorageAnalysisJobRepository(db).create(
+        organization_id=organization_id, triggered_by="manual", triggered_by_user_id=None
+    )
+    db.commit()
+    group = DuplicateGroupRepository(db).upsert_group(
+        organization_id=organization_id,
+        storage_analysis_job_id=analysis_job.id,
+        checksum="test-checksum",
+        file_count=1 + len(other_files),
+        total_size_bytes=sum(f.size_bytes or 0 for f in [keep_file, *other_files]),
+        recoverable_size_bytes=sum(f.size_bytes or 0 for f in other_files),
+        recommended_keep_file_id=keep_file.id,
+        recommended_keep_reason="Test reason.",
+        recommended_keep_confidence=0.86,
+    )
+    DuplicateGroupRepository(db).replace_members(
+        group,
+        [(keep_file.id, True)] + [(f.id, False) for f in other_files],
+    )
+    db.commit()
+    return group
+
+
+@requires_infra
+def test_create_plan_from_duplicate_group_targets_only_non_keep_members(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(
+        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    keep = _provision_file(db, connector_id=connector.id, name="keep.txt", provider_file_id="f-keep")
+    dupe_a = _provision_file(db, connector_id=connector.id, name="dupe_a.txt", provider_file_id="f-a")
+    dupe_b = _provision_file(db, connector_id=connector.id, name="dupe_b.txt", provider_file_id="f-b")
+    group = _provision_duplicate_group(
+        db, organization_id=user.organization_id, keep_file=keep, other_files=[dupe_a, dupe_b]
+    )
+    service = ExecutionPlanService(db)
+
+    plan = service.create_plan_from_duplicate_group(
+        group.id, organization_id=user.organization_id, user_id=user.id
+    )
+
+    assert plan.duplicate_group_id == group.id
+    assert plan.recommendation_id is None
+    detail = service.get_detail(plan.id, organization_id=user.organization_id)
+    target_ids = {s.target_file_id for s in detail.steps}
+    assert target_ids == {dupe_a.id, dupe_b.id}
+    assert keep.id not in target_ids
+    assert all(s.action_type == ExecutionActionType.REMOVE_DUPLICATE for s in detail.steps)
+
+
+@requires_infra
+def test_create_plan_from_duplicate_group_rejects_a_second_plan_while_one_is_active(
+    db: Session,
+) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(
+        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    keep = _provision_file(db, connector_id=connector.id, name="keep.txt", provider_file_id="f-keep")
+    dupe = _provision_file(db, connector_id=connector.id, name="dupe.txt", provider_file_id="f-dupe")
+    group = _provision_duplicate_group(
+        db, organization_id=user.organization_id, keep_file=keep, other_files=[dupe]
+    )
+    service = ExecutionPlanService(db)
+    service.create_plan_from_duplicate_group(
+        group.id, organization_id=user.organization_id, user_id=user.id
+    )
+
+    with pytest.raises(ConflictError):
+        service.create_plan_from_duplicate_group(
+            group.id, organization_id=user.organization_id, user_id=user.id
+        )
+
+
+@requires_infra
+def test_create_plan_from_duplicate_group_rejects_another_organizations_group(
+    db: Session,
+) -> None:
+    user_a = _provision_user(db)
+    connector_a = _provision_connector(
+        db, organization_id=user_a.organization_id, user_id=user_a.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    keep = _provision_file(db, connector_id=connector_a.id, name="keep.txt", provider_file_id="f-keep")
+    dupe = _provision_file(db, connector_id=connector_a.id, name="dupe.txt", provider_file_id="f-dupe")
+    group = _provision_duplicate_group(
+        db, organization_id=user_a.organization_id, keep_file=keep, other_files=[dupe]
+    )
+
+    user_b = _provision_user(db)
+    service = ExecutionPlanService(db)
+
+    with pytest.raises(NotFoundError):
+        service.create_plan_from_duplicate_group(
+            group.id, organization_id=user_b.organization_id, user_id=user_b.id
+        )
+
+
+@requires_infra
+def test_create_ad_hoc_plan_targets_exactly_the_selected_files(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(
+        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    file_a = _provision_file(db, connector_id=connector.id, name="old_a.pdf", provider_file_id="f-a")
+    file_b = _provision_file(db, connector_id=connector.id, name="old_b.pdf", provider_file_id="f-b")
+    service = ExecutionPlanService(db)
+
+    plan = service.create_ad_hoc_plan(
+        [file_a.id, file_b.id],
+        action_type=ExecutionActionType.ARCHIVE,
+        organization_id=user.organization_id,
+        user_id=user.id,
+    )
+
+    assert plan.recommendation_id is None
+    assert plan.duplicate_group_id is None
+    detail = service.get_detail(plan.id, organization_id=user.organization_id)
+    assert {s.target_file_id for s in detail.steps} == {file_a.id, file_b.id}
+    assert all(s.action_type == ExecutionActionType.ARCHIVE for s in detail.steps)
+
+
+@requires_infra
+def test_create_ad_hoc_plan_rejects_a_non_archive_action(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(
+        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    file_a = _provision_file(db, connector_id=connector.id, name="a.pdf", provider_file_id="f-a")
+    service = ExecutionPlanService(db)
+
+    with pytest.raises(ValidationError):
+        service.create_ad_hoc_plan(
+            [file_a.id],
+            action_type=ExecutionActionType.RENAME,
+            organization_id=user.organization_id,
+            user_id=user.id,
+        )
+
+
+@requires_infra
+def test_create_ad_hoc_plan_silently_drops_a_file_id_from_another_organization(
+    db: Session,
+) -> None:
+    """Security-critical: a caller-supplied file id list is not already
+    org-scoped the way a Recommendation's or DuplicateGroup's affected
+    files are — `create_ad_hoc_plan` must re-verify ownership itself,
+    never trust the request."""
+    user_a = _provision_user(db)
+    connector_a = _provision_connector(
+        db, organization_id=user_a.organization_id, user_id=user_a.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    file_a = _provision_file(db, connector_id=connector_a.id, name="a.pdf", provider_file_id="f-a")
+
+    user_b = _provision_user(db)
+    connector_b = _provision_connector(
+        db, organization_id=user_b.organization_id, user_id=user_b.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    file_b = _provision_file(db, connector_id=connector_b.id, name="b.pdf", provider_file_id="f-b")
+
+    service = ExecutionPlanService(db)
+    plan = service.create_ad_hoc_plan(
+        [file_a.id, file_b.id],
+        action_type=ExecutionActionType.ARCHIVE,
+        organization_id=user_a.organization_id,
+        user_id=user_a.id,
+    )
+
+    detail = service.get_detail(plan.id, organization_id=user_a.organization_id)
+    target_ids = {s.target_file_id for s in detail.steps}
+    assert target_ids == {file_a.id}
+    assert file_b.id not in target_ids
+
+
+@requires_infra
+def test_create_ad_hoc_plan_rejects_an_empty_selection(db: Session) -> None:
+    user = _provision_user(db)
+    service = ExecutionPlanService(db)
+
+    with pytest.raises(ValidationError):
+        service.create_ad_hoc_plan(
+            [], action_type=ExecutionActionType.ARCHIVE,
+            organization_id=user.organization_id, user_id=user.id,
+        )
 
 
 # ----------------------------------------------------------------------

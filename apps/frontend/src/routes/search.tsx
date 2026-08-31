@@ -1,14 +1,27 @@
 import { useMutation } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import type { SearchResponse } from "@vault/types";
-import { useState } from "react";
+import { Search as SearchIcon, SearchX } from "lucide-react";
+import { useEffect, useState } from "react";
+import { z } from "zod";
 
+import { AppShell } from "@/components/app-shell/app-shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiClient } from "@/lib/api-client";
-import { retrievalMethodColor, retrievalMethodLabel } from "@/lib/retrieval-method";
+import { fileTypeIcon } from "@/lib/file-icon";
+import { retrievalMethodBadgeVariant, retrievalMethodLabel } from "@/lib/retrieval-method";
 import { useAuthStore } from "@/stores/auth-store";
 
+const searchParamsSchema = z.object({
+  q: z.string().optional(),
+});
+
 export const Route = createFileRoute("/search")({
+  validateSearch: searchParamsSchema,
   beforeLoad: () => {
     if (useAuthStore.getState().status !== "authenticated") {
       throw redirect({ to: "/login" });
@@ -18,12 +31,21 @@ export const Route = createFileRoute("/search")({
 });
 
 function SearchPage() {
-  const [query, setQuery] = useState("");
+  const { q } = Route.useSearch();
+  const [query, setQuery] = useState(q ?? "");
 
   const searchMutation = useMutation({
     mutationFn: (searchQuery: string) =>
       apiClient.post<SearchResponse>("/v1/search", { query: searchQuery }),
   });
+
+  useEffect(() => {
+    if (q && q.trim().length > 0) {
+      searchMutation.mutate(q);
+    }
+    // Only re-run when the incoming ?q= changes (e.g. from the command palette).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -34,60 +56,84 @@ function SearchPage() {
   const results = searchMutation.data?.results ?? [];
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
-      <Link to="/dashboard" className="text-sm underline">
-        ← Back to dashboard
-      </Link>
-      <h1 className="text-xl font-semibold">Search</h1>
+    <AppShell title="Search">
+      <div className="mx-auto flex max-w-3xl flex-col gap-6">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Search</h1>
+          <p className="text-sm text-muted-foreground">
+            Search by file name, owner, topic, or ask a natural-language question.
+          </p>
+        </div>
 
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search files by name, owner, topic…"
-          className="flex-1 rounded-md border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950"
-        />
-        <Button type="submit" disabled={searchMutation.isPending || query.trim().length === 0}>
-          {searchMutation.isPending ? "Searching…" : "Search"}
-        </Button>
-      </form>
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <div className="relative flex-1">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Show invoices from last year…"
+              className="pl-9"
+              autoFocus
+            />
+          </div>
+          <Button type="submit" disabled={searchMutation.isPending || query.trim().length === 0}>
+            {searchMutation.isPending ? "Searching…" : "Search"}
+          </Button>
+        </form>
 
-      {searchMutation.isError && (
-        <p className="text-sm text-red-600">Couldn't run that search. Please try again.</p>
-      )}
+        {searchMutation.isPending && (
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 rounded-xl" />
+            ))}
+          </div>
+        )}
 
-      {searchMutation.isSuccess && results.length === 0 && (
-        <p className="text-sm text-neutral-500">
-          No matching files found for "{searchMutation.data.query}".
-        </p>
-      )}
+        {searchMutation.isError && (
+          <EmptyState title="Couldn't run that search" description="Please try again." />
+        )}
 
-      {results.length > 0 && (
-        <ul className="flex flex-col gap-2">
-          {results.map((result) => (
-            <li key={result.file_id}>
-              <Link
-                to="/files/$fileId"
-                params={{ fileId: result.file_id }}
-                className="flex items-center justify-between gap-4 rounded-lg border border-neutral-200 p-3 text-sm hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{result.name}</p>
-                  <p className="truncate text-neutral-500">{result.path}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-1 text-xs font-medium ${retrievalMethodColor(result.retrieval_method)}`}
+        {searchMutation.isSuccess && results.length === 0 && (
+          <EmptyState
+            icon={SearchX}
+            title="No matches found"
+            description={`Nothing matched "${searchMutation.data.query}". Try a different phrase, or check that this connector has been scanned.`}
+          />
+        )}
+
+        {results.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {results.map((result) => {
+              const Icon = fileTypeIcon(null);
+              return (
+                <li key={result.file_id}>
+                  <Link
+                    to="/files/$fileId"
+                    params={{ fileId: result.file_id }}
+                    className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-clay-sm transition-shadow hover:shadow-clay"
                   >
-                    {retrievalMethodLabel(result.retrieval_method)}
-                  </span>
-                  <span className="text-neutral-400">{Math.round(result.score * 100)}%</span>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                      <Icon className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{result.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{result.path}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge variant={retrievalMethodBadgeVariant(result.retrieval_method)}>
+                        {retrievalMethodLabel(result.retrieval_method)}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {Math.round(result.score * 100)}%
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </AppShell>
   );
 }

@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     # >=32 bytes so PyJWT doesn't warn about weak HMAC key length even with
     # the unset-in-env default — still just a placeholder, never use in prod.
     jwt_secret: str = "changeme-in-env-use-a-real-32-byte-secret"
-    ai_gateway_key: str = ""
     # Google Identity Services (client-side sign-in, Phase 2) verifies ID
     # tokens against this as the expected audience. The same client_id/secret
     # pair is also used for Phase 3's Workspace Connector — a separate,
@@ -112,6 +111,45 @@ class Settings(BaseSettings):
     # recommendation cycle, so a short TTL trades a few seconds of
     # staleness for skipping the DB entirely on repeat loads.
     dashboard_cache_ttl_seconds: int = 30
+
+    # Phase 2 (AI File Intelligence). `completion_provider` selects the
+    # AIGateway's completion adapter (see `ai_gateway/__init__.py`'s
+    # `get_ai_gateway()`) — "extractive" is today's deterministic stub
+    # (ADR-018), unchanged by default. Switching to "openai_compatible"
+    # only takes effect once `completion_api_key` is also set; if the key
+    # is empty, `get_ai_gateway()` deliberately still returns the stub so
+    # flipping this setting alone can never silently break every existing
+    # `AIGateway.complete()` caller (RAG chat included). Defaults point at
+    # Moonshot's Kimi API, but any OpenAI-compatible chat completions
+    # endpoint (GLM, etc.) works via `completion_api_base_url`/
+    # `completion_model_name` alone — no code change.
+    completion_provider: Literal["extractive", "openai_compatible"] = "extractive"
+    completion_api_base_url: str = "https://api.moonshot.ai/v1"
+    completion_api_key: str = ""
+    completion_model_name: str = "kimi-k2-0711-preview"
+    completion_request_timeout_seconds: int = 60
+
+    # AI Storage Assistant (ADR-024) — extends the existing "Ask Vault"
+    # conversation system (ConversationService) with deterministic
+    # intent-routed tools over Storage Intelligence data. Deliberately
+    # reuses `completion_*` above rather than adding a second "which LLM"
+    # settings block — OpenRouter (for GLM) is itself an OpenAI-compatible
+    # chat-completions endpoint, so pointing `completion_api_base_url` at
+    # `https://openrouter.ai/api/v1` with the desired model in
+    # `completion_model_name` is all that's needed; no new provider code.
+    # There is intentionally no `ai_request_timeout_seconds` — the HTTP
+    # timeout is fixed once at provider construction from
+    # `completion_request_timeout_seconds` above, and nothing here could
+    # enforce a second, unrelated timeout value.
+    ai_max_output_tokens: int = 1024
+    ai_max_tool_calls: int = 3
+    ai_max_context_items: int = 10
+    ai_max_history_messages: int = 6
+    ai_max_search_results: int = 10
+    ai_tool_cache_ttl_seconds: int = 60
+    ai_tool_rate_limit_per_minute: int = 10
+    ai_max_large_file_threshold_bytes: int = 5 * 1024**4
+    ai_max_age_days: int = 3650
 
     @property
     def cors_origins_list(self) -> list[str]:

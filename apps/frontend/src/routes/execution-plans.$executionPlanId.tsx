@@ -1,10 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import type { ApprovalRequest, ExecutionJob, ExecutionPlanDetail } from "@vault/types";
+import { ChevronLeft, RotateCcw, ShieldAlert } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell/app-shell";
+import { toast } from "@/components/ui/toaster";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiClient } from "@/lib/api-client";
-import { actionTypeLabel, planStatusColor, riskLevelColor } from "@/lib/execution-style";
+import { actionTypeLabel, planStatusBadgeVariant, riskLevelBadgeVariant } from "@/lib/execution-style";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import { useAuthStore } from "@/stores/auth-store";
@@ -17,6 +23,15 @@ export const Route = createFileRoute("/execution-plans/$executionPlanId")({
   },
   component: ExecutionPlanDetailPage,
 });
+
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium">{value}</span>
+    </div>
+  );
+}
 
 function ExecutionPlanDetailPage() {
   const { executionPlanId } = Route.useParams();
@@ -39,149 +54,145 @@ function ExecutionPlanDetailPage() {
   const rollbackMutation = useMutation({
     mutationFn: () =>
       apiClient.post<ExecutionJob>(`/v1/execution-plans/${executionPlanId}/rollback`),
-    onSuccess: () => {
+    onSuccess: (job) => {
       void queryClient.invalidateQueries({ queryKey: ["execution-plans", executionPlanId] });
       void queryClient.invalidateQueries({ queryKey: ["execution-jobs"] });
+      toast.success("Rollback job started", {
+        action: {
+          label: "View progress",
+          onClick: () => {
+            window.location.href = `/execution-jobs/${job.id}`;
+          },
+        },
+      });
+    },
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : "Couldn't start rollback.");
     },
   });
 
   const plan = planQuery.data;
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
-      <Link to="/execution-plans" className="text-sm underline">
-        ← Back to Execution Center
-      </Link>
+    <AppShell title="Execution plan">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <Link
+          to="/execution-plans"
+          className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" /> Back to Execution Center
+        </Link>
 
-      {planQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {planQuery.isError && (
-        <p className="text-sm text-red-600">
-          Couldn't load this execution plan — you may not have permission to view it.
-        </p>
-      )}
+        {planQuery.isLoading && <Skeleton className="h-64 rounded-2xl" />}
+        {planQuery.isError && (
+          <p className="text-sm text-destructive">
+            Couldn&rsquo;t load this execution plan — you may not have permission to view it.
+          </p>
+        )}
 
-      {plan && (
-        <>
-          <div>
-            <span className={`font-medium capitalize ${planStatusColor(plan.status)}`}>
-              {plan.status.replace(/_/g, " ")}
-            </span>
-            <h1 className="text-xl font-semibold">Execution plan</h1>
-            <p className="text-neutral-500">{plan.estimated_impact}</p>
-          </div>
+        {plan && (
+          <>
+            <Card clay className="p-6">
+              <div className="mb-2 flex items-center gap-2">
+                <Badge variant={planStatusBadgeVariant(plan.status)} className="capitalize">
+                  {plan.status.replace(/_/g, " ")}
+                </Badge>
+                <Badge variant={riskLevelBadgeVariant(plan.risk_level)}>{plan.risk_level} risk</Badge>
+              </div>
+              <h1 className="text-lg font-semibold">Execution plan</h1>
+              <p className="text-sm text-muted-foreground">{plan.estimated_impact}</p>
+            </Card>
 
-          <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="mb-3 font-medium">Risk summary</h2>
-            <dl className="grid grid-cols-2 gap-y-3 text-sm">
-              <dt className="text-neutral-500">Risk level</dt>
-              <dd className={`font-medium ${riskLevelColor(plan.risk_level)}`}>
-                {plan.risk_level}
-              </dd>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Risk summary</CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y divide-border">
+                  <Field label="Steps" value={plan.steps.length} />
+                  <Field
+                    label="Estimated storage savings"
+                    value={
+                      plan.estimated_storage_savings_bytes !== null
+                        ? formatBytes(plan.estimated_storage_savings_bytes)
+                        : "—"
+                    }
+                  />
+                  <Field label="Rollback" value={plan.rollback_available ? "Available" : "Not reversible"} />
+                  <Field label="Target provider" value={plan.target_provider} />
+                  <Field label="Required permissions" value={plan.required_permissions.join(", ")} />
+                  <Field label="Created" value={formatRelativeTime(plan.created_at)} />
+                </CardContent>
+              </Card>
 
-              <dt className="text-neutral-500">Steps</dt>
-              <dd>{plan.steps.length}</dd>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Approval</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {approvalsQuery.isLoading && <Skeleton className="h-4 w-40" />}
+                  {approval ? (
+                    <Link to="/approvals" className="text-sm text-primary hover:underline">
+                      View in Approval Queue — status: {approval.status.replace(/_/g, " ")}
+                    </Link>
+                  ) : (
+                    !approvalsQuery.isLoading && (
+                      <p className="text-sm text-muted-foreground">
+                        No approval request found for this plan.
+                      </p>
+                    )
+                  )}
 
-              <dt className="text-neutral-500">Estimated storage savings</dt>
-              <dd>
-                {plan.estimated_storage_savings_bytes !== null
-                  ? formatBytes(plan.estimated_storage_savings_bytes)
-                  : "—"}
-              </dd>
+                  {canManage && plan.rollback_available && (
+                    <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+                      <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
+                        Reverses every executed step that hasn&rsquo;t already been rolled back —
+                        moved files move back, renamed files restore, archived files un-trash.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-fit"
+                        disabled={rollbackMutation.isPending}
+                        onClick={() => rollbackMutation.mutate()}
+                      >
+                        <RotateCcw className="size-4" />
+                        {rollbackMutation.isPending ? "Starting rollback…" : "Start rollback"}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
-              <dt className="text-neutral-500">Rollback</dt>
-              <dd>{plan.rollback_available ? "Available" : "Not reversible"}</dd>
-
-              <dt className="text-neutral-500">Target provider</dt>
-              <dd>{plan.target_provider}</dd>
-
-              <dt className="text-neutral-500">Required permissions</dt>
-              <dd>{plan.required_permissions.join(", ")}</dd>
-
-              <dt className="text-neutral-500">Created</dt>
-              <dd>{formatRelativeTime(plan.created_at)}</dd>
-            </dl>
-          </section>
-
-          <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="mb-3 font-medium">Approval</h2>
-            {approvalsQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-            {approval ? (
-              <Link
-                to="/approvals"
-                className="text-sm underline"
-              >
-                View in Approval Queue — status: {approval.status.replace(/_/g, " ")}
-              </Link>
-            ) : (
-              !approvalsQuery.isLoading && (
-                <p className="text-sm text-neutral-500">No approval request found for this plan.</p>
-              )
-            )}
-          </section>
-
-          {canManage && plan.rollback_available && (
-            <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-              <h2 className="mb-3 font-medium">Rollback</h2>
-              <p className="mb-3 text-sm text-neutral-500">
-                Reverses every step of this plan that was actually executed and hasn't already
-                been rolled back — moved files move back, renamed files restore, archived files
-                un-trash.
-              </p>
-              <Button
-                variant="outline"
-                disabled={rollbackMutation.isPending}
-                onClick={() => rollbackMutation.mutate()}
-              >
-                {rollbackMutation.isPending ? "Starting rollback…" : "Start rollback"}
-              </Button>
-              {rollbackMutation.isError && (
-                <p className="mt-2 text-sm text-red-600">
-                  {rollbackMutation.error instanceof ApiError
-                    ? rollbackMutation.error.message
-                    : "Couldn't start rollback."}
-                </p>
-              )}
-              {rollbackMutation.isSuccess && (
-                <p className="mt-2 text-sm text-green-600">
-                  Rollback job started —{" "}
-                  <Link
-                    to="/execution-jobs/$executionJobId"
-                    params={{ executionJobId: rollbackMutation.data.id }}
-                    className="underline"
-                  >
-                    view progress
-                  </Link>
-                  .
-                </p>
-              )}
-            </section>
-          )}
-
-          <section>
-            <h2 className="mb-3 font-medium">Steps ({plan.steps.length})</h2>
-            <ul className="flex flex-col gap-2">
-              {plan.steps.map((step) => (
-                <li
-                  key={step.id}
-                  className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{actionTypeLabel(step.action_type)}</span>
-                    <span className="text-xs capitalize text-neutral-400">{step.status}</span>
+            <Card>
+              <CardHeader>
+                <CardTitle>Steps ({plan.steps.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col divide-y divide-border">
+                {plan.steps.map((step) => (
+                  <div key={step.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                    <div>
+                      <p className="font-medium">{actionTypeLabel(step.action_type)}</p>
+                      <Link
+                        to="/files/$fileId"
+                        params={{ fileId: step.target_file_id }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        {step.target_file_id}
+                      </Link>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 capitalize">
+                      {step.status}
+                    </Badge>
                   </div>
-                  <Link
-                    to="/files/$fileId"
-                    params={{ fileId: step.target_file_id }}
-                    className="text-xs text-neutral-500 underline"
-                  >
-                    {step.target_file_id}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </>
-      )}
-    </main>
+                ))}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </AppShell>
   );
 }

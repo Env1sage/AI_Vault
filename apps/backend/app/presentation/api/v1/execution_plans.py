@@ -16,6 +16,7 @@ from app.presentation.dependencies.services import (
     get_execution_job_service,
     get_execution_plan_service,
 )
+from vault_shared import ValidationError
 from vault_shared.db.models import RoleName, User
 
 execution_plans_router = APIRouter(tags=["execution-plans"])
@@ -35,11 +36,36 @@ def create_execution_plan(
     user: User = Depends(_require_owner_or_admin),
     service: ExecutionPlanService = Depends(get_execution_plan_service),
 ) -> ExecutionPlanResponse:
-    plan = service.create_plan(
-        uuid.UUID(request.recommendation_id),
-        organization_id=user.organization_id,
-        user_id=user.id,
-    )
+    has_recommendation = request.recommendation_id is not None
+    has_duplicate_group = request.duplicate_group_id is not None
+    has_ad_hoc = bool(request.file_ids)
+    if sum([has_recommendation, has_duplicate_group, has_ad_hoc]) != 1:
+        raise ValidationError(
+            "Provide exactly one of recommendation_id, duplicate_group_id, "
+            "or file_ids (with action_type)."
+        )
+
+    if has_recommendation:
+        plan = service.create_plan(
+            uuid.UUID(request.recommendation_id),
+            organization_id=user.organization_id,
+            user_id=user.id,
+        )
+    elif has_duplicate_group:
+        plan = service.create_plan_from_duplicate_group(
+            uuid.UUID(request.duplicate_group_id),
+            organization_id=user.organization_id,
+            user_id=user.id,
+        )
+    else:
+        if not request.action_type or not request.file_ids:
+            raise ValidationError("action_type is required when providing file_ids.")
+        plan = service.create_ad_hoc_plan(
+            [uuid.UUID(fid) for fid in request.file_ids],
+            action_type=request.action_type,
+            organization_id=user.organization_id,
+            user_id=user.id,
+        )
     return ExecutionPlanResponse.from_model(plan)
 
 

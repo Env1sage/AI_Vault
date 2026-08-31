@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -11,12 +12,14 @@ from app.application.search_service import SearchResult
 from app.application.workflow_execution_service import WorkflowExecutionDetail
 from app.application.workflow_service import WorkflowDetail
 from vault_shared.db.models import (
+    AIProviderConfig,
     ApprovalRequest,
     AutomationTemplate,
     Citation,
     Conversation,
     ConversationMessage,
     DashboardSnapshot,
+    DuplicateGroup,
     EmbeddingJob,
     EmbeddingProgress,
     EnrichmentJob,
@@ -28,8 +31,11 @@ from vault_shared.db.models import (
     File,
     FileClassification,
     FileExtraction,
+    FileIntelligence,
     FileMetadata,
     InsightRecord,
+    IntelligenceJob,
+    IntelligenceProgress,
     KnowledgeAttribute,
     Notification,
     Organization,
@@ -37,6 +43,8 @@ from vault_shared.db.models import (
     RecommendationJob,
     ScanJob,
     ScanProgress,
+    StorageAnalysisJob,
+    StorageAnalysisSnapshot,
     StorageConnector,
     User,
     Workflow,
@@ -93,6 +101,38 @@ class OrganizationResponse(BaseModel):
 
 class OrganizationUpdateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+
+
+class AIProviderConfigResponse(BaseModel):
+    """Never includes the API key, encrypted or otherwise — mirrors
+    `ConnectorResponse`'s "never expose tokens" rule."""
+
+    configured: bool
+    model_name: str | None
+
+    @classmethod
+    def from_model(cls, config: AIProviderConfig | None) -> "AIProviderConfigResponse":
+        if config is None:
+            return cls(configured=False, model_name=None)
+        return cls(configured=True, model_name=config.model_name)
+
+
+class AIProviderConfigUpdateRequest(BaseModel):
+    """`api_key` blank/omitted keeps the organization's existing stored
+    key — only `model_name` is required on every update."""
+
+    api_key: str | None = Field(default=None, min_length=1)
+    model_name: str = Field(min_length=1, max_length=200)
+
+
+class AIProviderConfigTestRequest(BaseModel):
+    api_key: str | None = Field(default=None, min_length=1)
+    model_name: str = Field(min_length=1, max_length=200)
+
+
+class AIProviderConfigTestResponse(BaseModel):
+    success: bool
+    error: str | None = None
 
 
 class GoogleLoginRequest(BaseModel):
@@ -293,6 +333,55 @@ class FileExtractionResponse(BaseModel):
         )
 
 
+class FileIntelligenceEntityResponse(BaseModel):
+    type: str
+    value: str
+    confidence: float | None
+
+
+class FileIntelligenceResponse(BaseModel):
+    """Unlike `FileExtractionResponse`'s deliberate exclusion of raw
+    extracted text, `summary` here *is* meant to render directly — it's a
+    distilled, human-facing summary produced by the completion provider,
+    not raw extracted text. Don't "fix" this by removing it to match the
+    other precedent."""
+
+    status: str
+    document_type: str | None
+    summary: str | None
+    entities: list[FileIntelligenceEntityResponse]
+    structured_metadata: dict
+    topics: list[str]
+    confidence: float | None
+    provider: str
+    model_name: str
+    error: str | None
+    processed_at: datetime
+
+    @classmethod
+    def from_model(cls, intelligence: FileIntelligence) -> "FileIntelligenceResponse":
+        return cls(
+            status=intelligence.status,
+            document_type=intelligence.document_type,
+            summary=intelligence.summary,
+            entities=[
+                FileIntelligenceEntityResponse(
+                    type=entity.get("type", ""),
+                    value=entity.get("value", ""),
+                    confidence=entity.get("confidence"),
+                )
+                for entity in intelligence.entities
+            ],
+            structured_metadata=intelligence.structured_metadata,
+            topics=intelligence.topics,
+            confidence=intelligence.confidence,
+            provider=intelligence.provider,
+            model_name=intelligence.model_name,
+            error=intelligence.error,
+            processed_at=intelligence.processed_at,
+        )
+
+
 class KnowledgeAttributeResponse(BaseModel):
     attribute_type: str
     value: str
@@ -327,9 +416,11 @@ class FileDetailResponse(BaseModel):
     is_shared: bool
     owner_email: str | None
     provider_modified_at: datetime | None
+    web_view_link: str | None
     metadata: FileMetadataResponse | None
     classification: FileClassificationResponse | None
     extraction: FileExtractionResponse | None
+    intelligence: FileIntelligenceResponse | None
     knowledge_attributes: list[KnowledgeAttributeResponse]
     related_files: list[RelatedFileResponse]
 
@@ -345,6 +436,7 @@ class FileDetailResponse(BaseModel):
             is_shared=file.is_shared,
             owner_email=file.owner_email,
             provider_modified_at=file.provider_modified_at,
+            web_view_link=file.web_view_link,
             metadata=FileMetadataResponse.from_model(detail.metadata) if detail.metadata else None,
             classification=(
                 FileClassificationResponse.from_model(detail.classification)
@@ -353,6 +445,11 @@ class FileDetailResponse(BaseModel):
             ),
             extraction=(
                 FileExtractionResponse.from_model(detail.extraction) if detail.extraction else None
+            ),
+            intelligence=(
+                FileIntelligenceResponse.from_model(detail.intelligence)
+                if detail.intelligence
+                else None
             ),
             knowledge_attributes=[
                 KnowledgeAttributeResponse.from_model(attribute)
@@ -415,6 +512,52 @@ class EnrichmentJobResponse(BaseModel):
             completed_at=job.completed_at,
             created_at=job.created_at,
             progress=EnrichmentProgressResponse.from_model(progress) if progress else None,
+        )
+
+
+class IntelligenceProgressResponse(BaseModel):
+    files_pending: int
+    files_processed: int
+    files_failed: int
+    current_file_name: str | None
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, progress: IntelligenceProgress) -> "IntelligenceProgressResponse":
+        return cls(
+            files_pending=progress.files_pending,
+            files_processed=progress.files_processed,
+            files_failed=progress.files_failed,
+            current_file_name=progress.current_file_name,
+            updated_at=progress.updated_at,
+        )
+
+
+class IntelligenceJobResponse(BaseModel):
+    id: str
+    connector_id: str
+    triggered_by: str
+    status: str
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    progress: IntelligenceProgressResponse | None = None
+
+    @classmethod
+    def from_model(
+        cls, job: IntelligenceJob, *, progress: IntelligenceProgress | None = None
+    ) -> "IntelligenceJobResponse":
+        return cls(
+            id=str(job.id),
+            connector_id=str(job.connector_id),
+            triggered_by=job.triggered_by,
+            status=job.status,
+            error=job.error,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            created_at=job.created_at,
+            progress=IntelligenceProgressResponse.from_model(progress) if progress else None,
         )
 
 
@@ -499,15 +642,21 @@ class CitationResponse(BaseModel):
     snippet: str | None
     confidence: float
     retrieval_method: str
+    file_name: str | None = None
+    file_size_bytes: int | None = None
+    file_mime_type: str | None = None
 
     @classmethod
-    def from_model(cls, citation: Citation) -> "CitationResponse":
+    def from_model(cls, citation: Citation, *, file: File | None = None) -> "CitationResponse":
         return cls(
             id=str(citation.id),
             file_id=str(citation.file_id),
             snippet=citation.snippet,
             confidence=citation.confidence,
             retrieval_method=citation.retrieval_method,
+            file_name=file.name if file else None,
+            file_size_bytes=file.size_bytes if file else None,
+            file_mime_type=file.mime_type if file else None,
         )
 
 
@@ -518,13 +667,19 @@ class ConversationMessageResponse(BaseModel):
     retrieval_method: str | None
     provider: str | None
     token_usage: int | None
+    tool_name: str | None
     created_at: datetime
     citations: list[CitationResponse] = []
 
     @classmethod
     def from_model(
-        cls, message: ConversationMessage, *, citations: list[Citation] | None = None
+        cls,
+        message: ConversationMessage,
+        *,
+        citations: list[Citation] | None = None,
+        files_by_id: dict[uuid.UUID, File] | None = None,
     ) -> "ConversationMessageResponse":
+        files_by_id = files_by_id or {}
         return cls(
             id=str(message.id),
             role=message.role,
@@ -532,8 +687,12 @@ class ConversationMessageResponse(BaseModel):
             retrieval_method=message.retrieval_method,
             provider=message.provider,
             token_usage=message.token_usage,
+            tool_name=message.tool_name,
             created_at=message.created_at,
-            citations=[CitationResponse.from_model(c) for c in citations or []],
+            citations=[
+                CitationResponse.from_model(c, file=files_by_id.get(c.file_id))
+                for c in citations or []
+            ],
         )
 
 
@@ -565,7 +724,9 @@ class ConversationDetailResponse(ConversationResponse):
             updated_at=detail.conversation.updated_at,
             messages=[
                 ConversationMessageResponse.from_model(
-                    message, citations=detail.citations_by_message_id.get(message.id)
+                    message,
+                    citations=detail.citations_by_message_id.get(message.id),
+                    files_by_id=detail.files_by_id,
                 )
                 for message in detail.messages
             ],
@@ -587,7 +748,7 @@ class AskResponse(BaseModel):
             conversation=ConversationResponse.from_model(turn.conversation),
             user_message=ConversationMessageResponse.from_model(turn.user_message),
             assistant_message=ConversationMessageResponse.from_model(
-                turn.assistant_message, citations=turn.citations
+                turn.assistant_message, citations=turn.citations, files_by_id=turn.files_by_id
             ),
         )
 
@@ -782,7 +943,8 @@ class ExecutionStepResponse(BaseModel):
 class ExecutionPlanResponse(BaseModel):
     id: str
     organization_id: str
-    recommendation_id: str
+    recommendation_id: str | None
+    duplicate_group_id: str | None
     status: str
     target_provider: str
     estimated_impact: str
@@ -798,7 +960,10 @@ class ExecutionPlanResponse(BaseModel):
         return cls(
             id=str(plan.id),
             organization_id=str(plan.organization_id),
-            recommendation_id=str(plan.recommendation_id),
+            recommendation_id=str(plan.recommendation_id) if plan.recommendation_id else None,
+            duplicate_group_id=(
+                str(plan.duplicate_group_id) if plan.duplicate_group_id else None
+            ),
             status=plan.status,
             target_provider=plan.target_provider,
             estimated_impact=plan.estimated_impact,
@@ -824,7 +989,16 @@ class ExecutionPlanDetailResponse(ExecutionPlanResponse):
 
 
 class CreateExecutionPlanRequest(BaseModel):
-    recommendation_id: str
+    """Exactly one origin must be set — validated in the router, which
+    calls the matching `ExecutionPlanService` method. `file_ids` (with
+    `action_type`) is Storage Intelligence's ad-hoc origin: a user-picked
+    file selection from a large/old/inactive/temporary-candidate listing,
+    rather than a precomputed `Recommendation`/`DuplicateGroup`."""
+
+    recommendation_id: str | None = None
+    duplicate_group_id: str | None = None
+    file_ids: list[str] | None = None
+    action_type: str | None = None
 
 
 class ApprovalRequestResponse(BaseModel):
@@ -1217,6 +1391,213 @@ class AutomationTemplateResponse(BaseModel):
             description=template.description,
             category=template.category,
             node_definitions=template.node_definitions,
+        )
+
+
+class StorageFileResponse(BaseModel):
+    """A file's shape as it appears in Storage Intelligence's large/old/
+    inactive/candidate listings — deliberately not `FileSummaryResponse`
+    (it lacks `provider_viewed_at`/`storage_source_id`, both needed here:
+    Phase 1 spec §8's "last_accessed_at"/"storage_source" columns)."""
+
+    id: str
+    name: str
+    path: str
+    mime_type: str | None
+    size_bytes: int | None
+    provider_modified_at: datetime | None
+    provider_viewed_at: datetime | None
+    storage_source_id: str
+
+    @classmethod
+    def from_model(cls, file: File) -> "StorageFileResponse":
+        return cls(
+            id=str(file.id),
+            name=file.name,
+            path=file.path,
+            mime_type=file.mime_type,
+            size_bytes=file.size_bytes,
+            provider_modified_at=file.provider_modified_at,
+            provider_viewed_at=file.provider_viewed_at,
+            storage_source_id=str(file.storage_source_id),
+        )
+
+
+class StorageFileListResponse(BaseModel):
+    items: list[StorageFileResponse]
+    total: int
+
+
+class DuplicateGroupResponse(BaseModel):
+    id: str
+    checksum: str
+    file_count: int
+    total_size_bytes: int
+    recoverable_size_bytes: int
+    recommended_keep_file_id: str | None
+    recommended_keep_reason: str | None
+    recommended_keep_confidence: float | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_model(cls, group: DuplicateGroup) -> "DuplicateGroupResponse":
+        return cls(
+            id=str(group.id),
+            checksum=group.checksum,
+            file_count=group.file_count,
+            total_size_bytes=group.total_size_bytes,
+            recoverable_size_bytes=group.recoverable_size_bytes,
+            recommended_keep_file_id=(
+                str(group.recommended_keep_file_id)
+                if group.recommended_keep_file_id
+                else None
+            ),
+            recommended_keep_reason=group.recommended_keep_reason,
+            recommended_keep_confidence=group.recommended_keep_confidence,
+            created_at=group.created_at,
+            updated_at=group.updated_at,
+        )
+
+
+class DuplicateGroupListResponse(BaseModel):
+    items: list[DuplicateGroupResponse]
+    total: int
+
+
+class DuplicateGroupMemberResponse(BaseModel):
+    file: StorageFileResponse
+    is_recommended_keep: bool
+
+
+class DuplicateGroupDetailResponse(DuplicateGroupResponse):
+    members: list[DuplicateGroupMemberResponse]
+
+    @classmethod
+    def from_model_with_members(
+        cls, group: DuplicateGroup, members: list[tuple[File, bool]]
+    ) -> "DuplicateGroupDetailResponse":
+        base = DuplicateGroupResponse.from_model(group)
+        return cls(
+            **base.model_dump(),
+            members=[
+                DuplicateGroupMemberResponse(
+                    file=StorageFileResponse.from_model(file), is_recommended_keep=is_keep
+                )
+                for file, is_keep in members
+            ],
+        )
+
+
+class StorageAnalysisJobResponse(BaseModel):
+    id: str
+    organization_id: str
+    triggered_by: str
+    status: str
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, job: StorageAnalysisJob) -> "StorageAnalysisJobResponse":
+        return cls(
+            id=str(job.id),
+            organization_id=str(job.organization_id),
+            triggered_by=job.triggered_by,
+            status=job.status,
+            error=job.error,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            created_at=job.created_at,
+        )
+
+
+class StorageOverviewResponse(BaseModel):
+    """`GET /v1/storage/overview` — the headline numbers (Phase 1 spec
+    §21's stat-card row): total size/files, duplicate savings, large/old/
+    inactive/temporary summary counts, total potential savings, and when
+    the org was last analyzed. `None` fields mean no analysis has run yet
+    for this organization — the frontend shows an empty state, never a
+    fabricated zero (Phase 1 spec's "never fabricate data" discipline,
+    carried over from the Search Performance work)."""
+
+    total_size_bytes: int | None
+    total_files: int | None
+    total_folders: int | None
+    duplicate_group_count: int | None
+    duplicate_file_count: int | None
+    duplicate_recoverable_bytes: int | None
+    large_file_count: int | None
+    large_file_bytes: int | None
+    old_file_count: int | None
+    old_file_bytes: int | None
+    inactive_file_count: int | None
+    inactive_file_bytes: int | None
+    temporary_candidate_count: int | None
+    temporary_candidate_bytes: int | None
+    total_potential_savings_bytes: int | None
+    last_analyzed_at: datetime | None
+    last_analysis_status: str | None
+
+    @classmethod
+    def from_models(
+        cls,
+        snapshot: StorageAnalysisSnapshot | None,
+        latest_job: StorageAnalysisJob | None,
+    ) -> "StorageOverviewResponse":
+        return cls(
+            total_size_bytes=snapshot.total_size_bytes if snapshot else None,
+            total_files=snapshot.total_files if snapshot else None,
+            total_folders=snapshot.total_folders if snapshot else None,
+            duplicate_group_count=snapshot.duplicate_group_count if snapshot else None,
+            duplicate_file_count=snapshot.duplicate_file_count if snapshot else None,
+            duplicate_recoverable_bytes=(
+                snapshot.duplicate_recoverable_bytes if snapshot else None
+            ),
+            large_file_count=snapshot.large_file_count if snapshot else None,
+            large_file_bytes=snapshot.large_file_bytes if snapshot else None,
+            old_file_count=snapshot.old_file_count if snapshot else None,
+            old_file_bytes=snapshot.old_file_bytes if snapshot else None,
+            inactive_file_count=snapshot.inactive_file_count if snapshot else None,
+            inactive_file_bytes=snapshot.inactive_file_bytes if snapshot else None,
+            temporary_candidate_count=snapshot.temporary_candidate_count if snapshot else None,
+            temporary_candidate_bytes=snapshot.temporary_candidate_bytes if snapshot else None,
+            total_potential_savings_bytes=(
+                snapshot.total_potential_savings_bytes if snapshot else None
+            ),
+            last_analyzed_at=snapshot.created_at if snapshot else None,
+            last_analysis_status=latest_job.status if latest_job else None,
+        )
+
+
+class StorageStatisticsResponse(BaseModel):
+    """`GET /v1/storage/statistics` — the breakdown data (Phase 1 spec
+    §7's "where is the user's storage going" charts), separate from the
+    headline numbers above so a client that only needs one doesn't fetch
+    the other."""
+
+    breakdown_by_type_bytes: dict[str, int]
+    breakdown_by_size_bucket_bytes: dict[str, int]
+    breakdown_by_source_bytes: dict[str, dict]
+    computed_at: datetime | None
+
+    @classmethod
+    def from_model(
+        cls, snapshot: StorageAnalysisSnapshot | None
+    ) -> "StorageStatisticsResponse":
+        if snapshot is None:
+            return cls(
+                breakdown_by_type_bytes={},
+                breakdown_by_size_bucket_bytes={},
+                breakdown_by_source_bytes={},
+                computed_at=None,
+            )
+        return cls(
+            breakdown_by_type_bytes=snapshot.breakdown_by_type_bytes,
+            breakdown_by_size_bucket_bytes=snapshot.breakdown_by_size_bucket_bytes,
+            breakdown_by_source_bytes=snapshot.breakdown_by_source_bytes,
+            computed_at=snapshot.created_at,
         )
 
 

@@ -1,10 +1,11 @@
+import contextlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import requests
 
-from vault_shared.errors import DependencyUnavailableError, UnauthorizedError
+from vault_shared.errors import DependencyUnavailableError, ReauthRequiredError, UnauthorizedError
 from vault_shared.logging import get_logger
 from vault_shared.settings import get_settings
 
@@ -131,18 +132,43 @@ class GoogleWorkspaceOAuthClient:
     @staticmethod
     def _extract_json(response: requests.Response, *, context: str) -> dict:
         if response.status_code != 200:
+            # Google's OAuth error body is a static, non-secret shape —
+            # {"error": "invalid_grant", "error_description": "..."} — never
+            # the token itself, so both fields are safe to log (Handbook
+            # §13's "token state, error category" allowance) and are what
+            # actually distinguishes a dead refresh token from every other
+            # failure mode instead of guessing from the HTTP status alone.
+            error_code: str | None = None
+            with contextlib.suppress(ValueError):
+                error_code = response.json().get("error")
             logger.warning(
                 "google_workspace_request_failed",
-                extra={"context": context, "status_code": response.status_code},
+                extra={
+                    "context": context,
+                    "status_code": response.status_code,
+                    "error_code": error_code,
+                },
             )
+            if error_code == "invalid_grant":
+                raise ReauthRequiredError(
+                    "Google authorization has expired or was revoked. Reconnect to continue."
+                )
             raise UnauthorizedError(f"Google Workspace {context} failed.")
         return response.json()
 
     @staticmethod
     def _to_token_set(payload: dict, *, refresh_token: str | None) -> GoogleTokenSet:
+        # A 200 response is not a guarantee the body is well-formed — treat a
+        # missing `access_token` the same as any other auth failure (a typed
+        # VaultError) rather than letting a raw KeyError escape as an
+        # unhandled 500 from the presentation layer.
+        try:
+            access_token = payload["access_token"]
+        except KeyError as exc:
+            raise UnauthorizedError("Google Workspace returned a malformed response.") from exc
         expires_in = int(payload.get("expires_in", 3600))
         return GoogleTokenSet(
-            access_token=payload["access_token"],
+            access_token=access_token,
             refresh_token=refresh_token,
             expires_at=datetime.now(UTC) + timedelta(seconds=expires_in),
             granted_scopes=payload.get("scope", ""),

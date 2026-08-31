@@ -40,6 +40,7 @@ docker compose \
 | `vault_queue_depth` | Gauge | `queue_name` | Backlog — is the worker fleet keeping up |
 | `vault_ai_provider_latency_seconds` | Histogram | `provider`, `operation` | Embedding/completion call latency, instrumented at the `AIGateway` boundary itself so every caller gets it for free |
 | `vault_workflow_executions_total` | Counter | `status` | Automation health — completed vs. failed vs. cancelled workflow runs |
+| `vault_assistant_tool_used_total` | Counter | `tool` | AI Storage Assistant (ADR-024) turns by which deterministic-classifier tool answered, if any. `tool="none"` means the question fell through to semantic search over file content — a rising share here is the signal that the intent classifier's rule table needs more coverage, since it's a purely keyword/regex-based router, not a real LLM dispatch. `tool="rate_limited"` means a tool match existed but the service-layer per-org-per-user rate limit skipped it, degrading gracefully to the semantic-search path instead. |
 
 `path` is always the route *template* (`/v1/files/{file_id}`), never a resolved path containing a real ID — using a real UUID as a label value would be an unbounded-cardinality mistake that degrades Prometheus itself, not just this app's own dashboards.
 

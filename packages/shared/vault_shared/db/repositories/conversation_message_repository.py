@@ -18,6 +18,7 @@ class ConversationMessageRepository:
         retrieval_method: str | None = None,
         provider: str | None = None,
         token_usage: int | None = None,
+        tool_name: str | None = None,
     ) -> ConversationMessage:
         message = ConversationMessage(
             conversation_id=conversation_id,
@@ -26,6 +27,7 @@ class ConversationMessageRepository:
             retrieval_method=retrieval_method,
             provider=provider,
             token_usage=token_usage,
+            tool_name=tool_name,
         )
         self._session.add(message)
         self._session.flush()
@@ -38,3 +40,20 @@ class ConversationMessageRepository:
             .order_by(ConversationMessage.created_at)
             .all()
         )
+
+    def list_recent_for_conversation(
+        self, conversation_id: uuid.UUID, *, limit: int
+    ) -> list[ConversationMessage]:
+        """Bounded history for `ConversationService.ask()`'s completion
+        call — a separate method from `list_for_conversation` (not an
+        optional `limit` param on it) so the thread page's `get_detail`,
+        which needs the *full* transcript, can never be accidentally
+        truncated by a caller passing the wrong default."""
+        rows = (
+            self._session.query(ConversationMessage)
+            .filter_by(conversation_id=conversation_id)
+            .order_by(ConversationMessage.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return list(reversed(rows))

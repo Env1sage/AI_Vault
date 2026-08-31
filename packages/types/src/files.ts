@@ -46,6 +46,31 @@ export interface FileExtractionInfo {
   extracted_at: string;
 }
 
+export type FileIntelligenceStatus = "success" | "failed" | "unsupported";
+
+export interface FileIntelligenceEntity {
+  type: string;
+  value: string;
+  confidence: number | null;
+}
+
+/** Unlike `FileExtractionInfo`'s deliberate exclusion of raw extracted
+ * text, `summary` here is meant to render directly — it's a distilled,
+ * human-facing summary, not raw extracted text. */
+export interface FileIntelligence {
+  status: FileIntelligenceStatus;
+  document_type: string | null;
+  summary: string | null;
+  entities: FileIntelligenceEntity[];
+  structured_metadata: Record<string, unknown>;
+  topics: string[];
+  confidence: number | null;
+  provider: string;
+  model_name: string;
+  error: string | null;
+  processed_at: string;
+}
+
 export interface KnowledgeAttribute {
   attribute_type: string;
   value: string;
@@ -73,9 +98,11 @@ export interface FileDetail {
   is_shared: boolean;
   owner_email: string | null;
   provider_modified_at: string | null;
+  web_view_link: string | null;
   metadata: FileMetadata | null;
   classification: FileClassification | null;
   extraction: FileExtractionInfo | null;
+  intelligence: FileIntelligence | null;
   knowledge_attributes: KnowledgeAttribute[];
   related_files: RelatedFile[];
 }

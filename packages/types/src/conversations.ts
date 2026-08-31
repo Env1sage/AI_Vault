@@ -6,21 +6,31 @@ export interface AskRequest {
   question: string;
 }
 
+/** "tool" (ADR-024) — set on a citation/message produced by the AI Storage
+ * Assistant's deterministic tool-routing path, distinct from `RetrievalMethod`
+ * (search.ts), which describes only `SearchService`'s own metadata/semantic
+ * retrieval and never includes "tool". */
+export type ConversationRetrievalMethod = RetrievalMethod | "tool";
+
 export interface Citation {
   id: string;
   file_id: string;
   snippet: string | null;
   confidence: number;
-  retrieval_method: RetrievalMethod;
+  retrieval_method: ConversationRetrievalMethod;
+  file_name: string | null;
+  file_size_bytes: number | null;
+  file_mime_type: string | null;
 }
 
 export interface ConversationMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  retrieval_method: RetrievalMethod | null;
+  retrieval_method: ConversationRetrievalMethod | null;
   provider: string | null;
   token_usage: number | null;
+  tool_name: string | null;
   created_at: string;
   citations: Citation[];
 }

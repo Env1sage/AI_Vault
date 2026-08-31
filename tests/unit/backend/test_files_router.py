@@ -23,6 +23,7 @@ class _FakeFile:
         self.is_shared = False
         self.owner_email = "founder@acme.com"
         self.provider_modified_at = datetime.now(UTC)
+        self.web_view_link = f"https://drive.google.com/file/d/{self.id}/view"
 
 
 class _FakeFileMetadata:
@@ -56,6 +57,21 @@ class _FakeFileExtraction:
         self.extracted_at = datetime.now(UTC)
 
 
+class _FakeFileIntelligence:
+    def __init__(self) -> None:
+        self.status = "success"
+        self.document_type = "contract"
+        self.summary = "A services agreement between two parties."
+        self.entities = [{"type": "party", "value": "Acme Corp", "confidence": 0.9}]
+        self.structured_metadata = {"effective_date": "2026-01-01"}
+        self.topics = ["services"]
+        self.confidence = 0.87
+        self.provider = "openai_compatible"
+        self.model_name = "kimi-k2-0711-preview"
+        self.error = None
+        self.processed_at = datetime.now(UTC)
+
+
 class _FakeKnowledgeAttribute:
     def __init__(self, *, attribute_type: str, value: str) -> None:
         self.attribute_type = attribute_type
@@ -85,6 +101,7 @@ class _FakeFileDetail:
     metadata: _FakeFileMetadata | None
     classification: _FakeFileClassification | None
     extraction: _FakeFileExtraction | None
+    intelligence: _FakeFileIntelligence | None
     knowledge_attributes: list
     related_files: list
 
@@ -144,6 +161,7 @@ def test_get_file_detail_returns_the_full_enrichment_picture(as_member, fake_fil
         metadata=_FakeFileMetadata(),
         classification=_FakeFileClassification(),
         extraction=_FakeFileExtraction(),
+        intelligence=_FakeFileIntelligence(),
         knowledge_attributes=[_FakeKnowledgeAttribute(attribute_type="department", value="Finance")],
         related_files=[
             _FakeRelatedFile(
@@ -161,9 +179,13 @@ def test_get_file_detail_returns_the_full_enrichment_picture(as_member, fake_fil
     assert response.status_code == 200
     body = response.json()
     assert body["name"] == "Report.pdf"
+    assert body["web_view_link"] == file.web_view_link
     assert body["metadata"]["normalized_extension"] == "pdf"
     assert body["classification"]["document_type"] == "Documentation"
     assert body["extraction"]["status"] == "success"
+    assert body["intelligence"]["document_type"] == "contract"
+    assert body["intelligence"]["summary"] == "A services agreement between two parties."
+    assert body["intelligence"]["entities"][0]["value"] == "Acme Corp"
     assert body["knowledge_attributes"][0]["attribute_type"] == "department"
     assert body["related_files"][0]["name"] == "Report_v1.pdf"
     assert body["related_files"][0]["relationship_type"] == "sequential_version"
@@ -186,6 +208,7 @@ def test_get_file_detail_handles_a_file_with_no_enrichment_yet(as_member, fake_f
         metadata=None,
         classification=None,
         extraction=None,
+        intelligence=None,
         knowledge_attributes=[],
         related_files=[],
     )
@@ -198,5 +221,6 @@ def test_get_file_detail_handles_a_file_with_no_enrichment_yet(as_member, fake_f
     assert body["metadata"] is None
     assert body["classification"] is None
     assert body["extraction"] is None
+    assert body["intelligence"] is None
     assert body["knowledge_attributes"] == []
     assert body["related_files"] == []

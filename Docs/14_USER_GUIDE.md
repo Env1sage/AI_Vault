@@ -33,7 +33,14 @@ Your home base — connected storage at a glance, how much of it is understood v
 
 ## Search & Chat
 
-**Search** finds files by meaning, not just filename — it understands what you're asking for, ranks results by relevance, and shows you why each result matched. **Chat** lets you ask questions in plain English about your storage ("what contracts are we tracking?", "which files hasn't anyone touched in two years?") and get an answer with citations back to the actual files it used — never a made-up answer about files it didn't actually find.
+**Search** finds files by meaning, not just filename — it understands what you're asking for, ranks results by relevance, and shows you why each result matched. **Chat ("Ask Vault")** lets you ask questions in plain English and get an answer with citations back to the actual files it used — never a made-up answer about files it didn't actually find.
+
+Ask Vault answers two kinds of questions:
+
+- **Storage questions** — "How much storage am I using?", "What's taking the most space?", "Show me duplicates.", "What are my largest files?", "Find files that haven't been used in a year.", "What should I clean up first?" — these are answered directly from your organization's real Storage Intelligence data (the same numbers you'd see on the Storage Intelligence page), never estimated or guessed. The chat message shows a small label naming which lookup answered it (e.g. "Storage overview").
+- **File-content questions** — "What does the payroll file say?", "Find the presentation about the marketing strategy." — these search across your actual file names and content and cite the specific files the answer came from.
+
+Ask Vault is **read-only**. It will never delete, move, rename, or modify a file, and it will never tell you a file is "safe to delete" — for cleanup, it points you to the relevant Storage Intelligence page, where you review and decide yourself.
 
 ## Recommendations
 

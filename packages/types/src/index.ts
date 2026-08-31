@@ -1,4 +1,10 @@
 export type {
+  AIProviderConfig,
+  AIProviderConfigTestRequest,
+  AIProviderConfigTestResponse,
+  AIProviderConfigUpdateRequest,
+} from "./ai-provider";
+export type {
   AuthSession,
   GoogleLoginRequest,
   Organization,
@@ -13,6 +19,7 @@ export type {
   Conversation,
   ConversationDetail,
   ConversationMessage,
+  ConversationRetrievalMethod,
 } from "./conversations";
 export type { Dashboard, DashboardSnapshot, InsightRecord } from "./dashboard";
 export type {
@@ -54,6 +61,9 @@ export type {
   FileDetail,
   FileExtractionInfo,
   FileExtractionStatus,
+  FileIntelligence,
+  FileIntelligenceEntity,
+  FileIntelligenceStatus,
   FileListResponse,
   FileMetadata,
   FileSummary,
@@ -62,6 +72,12 @@ export type {
   RelationshipType,
 } from "./files";
 export type { LivenessResponse, ReadinessResponse, VersionResponse } from "./health";
+export type {
+  IntelligenceJob,
+  IntelligenceJobStatus,
+  IntelligenceProgress,
+  IntelligenceTrigger,
+} from "./intelligence";
 export type {
   Recommendation,
   RecommendationCategory,
@@ -74,6 +90,20 @@ export type {
 } from "./recommendations";
 export type { ScanJob, ScanProgress, ScanStatus, ScanType, StartScanRequest } from "./scans";
 export type { RetrievalMethod, SearchRequest, SearchResponse, SearchResult } from "./search";
+export type {
+  DuplicateGroup,
+  DuplicateGroupDetail,
+  DuplicateGroupListResponse,
+  DuplicateGroupMember,
+  StorageAnalysisJob,
+  StorageAnalysisJobStatus,
+  StorageAnalysisJobTrigger,
+  StorageFile,
+  StorageFileListResponse,
+  StorageOverview,
+  StorageSourceBreakdown,
+  StorageStatistics,
+} from "./storage-intelligence";
 export type {
   ApplyAutomationTemplateRequest,
   AutomationTemplate,

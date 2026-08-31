@@ -1,10 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import type { ApprovalRequest, Workflow, WorkflowExecution } from "@vault/types";
+import {
+  Bell,
+  ClipboardCheck,
+  LayoutTemplate,
+  ShieldCheck,
+  Workflow as WorkflowIcon,
+  Zap,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell/app-shell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient } from "@/lib/api-client";
 import { formatRelativeTime } from "@/lib/format-relative-time";
-import { executionStatusColor, workflowStatusColor } from "@/lib/workflow-style";
+import { executionStatusBadgeVariant, workflowStatusBadgeVariant } from "@/lib/workflow-style";
 import { useAuthStore } from "@/stores/auth-store";
 
 export const Route = createFileRoute("/automation")({
@@ -16,14 +29,24 @@ export const Route = createFileRoute("/automation")({
   component: AutomationDashboardPage,
 });
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
-      <p className="text-xs text-neutral-500">{label}</p>
-      <p className="text-lg font-semibold">{value}</p>
-    </div>
+    <Card clay className="flex flex-col gap-2 p-4">
+      <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="size-4" />
+      </div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xl font-semibold">{value}</p>
+    </Card>
   );
 }
+
+const QUICK_LINKS = [
+  { to: "/workflows", label: "Workflow Library", icon: WorkflowIcon },
+  { to: "/workflow-policies", label: "Policy Manager", icon: ShieldCheck },
+  { to: "/automation-templates", label: "Templates", icon: LayoutTemplate },
+  { to: "/notifications", label: "Notifications", icon: Bell },
+];
 
 function AutomationDashboardPage() {
   const workflowsQuery = useQuery({
@@ -42,109 +65,107 @@ function AutomationDashboardPage() {
   const activeWorkflows = workflowsQuery.data ?? [];
   const pendingApprovals = pendingApprovalsQuery.data ?? [];
   const recentExecutions = (recentExecutionsQuery.data ?? []).slice(0, 5);
-  const failedRecent = (recentExecutionsQuery.data ?? []).filter(
-    (e) => e.status === "failed",
-  ).length;
+  const failedRecent = (recentExecutionsQuery.data ?? []).filter((e) => e.status === "failed").length;
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-6 p-8">
-      <Link to="/dashboard" className="text-sm underline">
-        ← Back to dashboard
-      </Link>
-      <h1 className="text-xl font-semibold">Automation Dashboard</h1>
-      <p className="text-neutral-500">
-        Automation is structured execution of the policies you configure — not autonomous
-        intelligence. Every automated action still produces the same audited approval decision a
-        human's would, just attributed to a policy instead of a person.
-      </p>
+    <AppShell title="Automation">
+      <div className="mx-auto flex max-w-5xl flex-col gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Automation Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Automation is structured execution of the policies you configure — not autonomous
+            intelligence. Every automated action still produces the same audited approval
+            decision a human&rsquo;s would, just attributed to a policy instead of a person.
+          </p>
+        </div>
 
-      <nav className="flex flex-wrap gap-4 text-sm">
-        <Link to="/workflows" className="underline">
-          Workflow Library
-        </Link>
-        <Link to="/workflow-executions" className="underline">
-          Execution History
-        </Link>
-        <Link to="/workflow-policies" className="underline">
-          Policy Manager
-        </Link>
-        <Link to="/automation-templates" className="underline">
-          Templates Gallery
-        </Link>
-        <Link to="/notifications" className="underline">
-          Notifications
-        </Link>
-      </nav>
+        <div className="flex flex-wrap gap-2">
+          {QUICK_LINKS.map((link) => (
+            <Button key={link.to} variant="outline" size="sm" asChild>
+              <Link to={link.to}>
+                <link.icon className="size-4" /> {link.label}
+              </Link>
+            </Button>
+          ))}
+        </div>
 
-      <section>
-        <h2 className="mb-3 font-medium">Overview</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Active workflows" value={String(activeWorkflows.length)} />
-          <StatTile label="Pending approvals" value={String(pendingApprovals.length)} />
-          <StatTile label="Recent runs" value={String(recentExecutionsQuery.data?.length ?? 0)} />
-          <StatTile label="Failed runs" value={String(failedRecent)} />
+          <StatTile icon={Zap} label="Active workflows" value={String(activeWorkflows.length)} />
+          <StatTile icon={ClipboardCheck} label="Pending approvals" value={String(pendingApprovals.length)} />
+          <StatTile
+            icon={WorkflowIcon}
+            label="Recent runs"
+            value={String(recentExecutionsQuery.data?.length ?? 0)}
+          />
+          <StatTile icon={Bell} label="Failed runs" value={String(failedRecent)} />
         </div>
-      </section>
 
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-medium">Recent executions</h2>
-          <Link to="/workflow-executions" className="text-sm underline">
-            View all
-          </Link>
-        </div>
-        {recentExecutions.length === 0 ? (
-          <p className="text-sm text-neutral-500">No workflow executions yet.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {recentExecutions.map((execution) => (
-              <li key={execution.id}>
-                <Link
-                  to="/workflow-executions/$workflowExecutionId"
-                  params={{ workflowExecutionId: execution.id }}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3 text-sm hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
-                >
-                  <span className={`font-medium capitalize ${executionStatusColor(execution.status)}`}>
-                    {execution.status}
-                  </span>
-                  <span className="text-xs text-neutral-400">
-                    {formatRelativeTime(execution.created_at)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle>Recent executions</CardTitle>
+              <Link to="/workflow-executions" className="text-xs font-medium text-primary hover:underline">
+                View all
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {recentExecutions.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No workflow executions yet.</p>
+              ) : (
+                <ul className="flex flex-col divide-y divide-border">
+                  {recentExecutions.map((execution) => (
+                    <li key={execution.id}>
+                      <Link
+                        to="/workflow-executions/$workflowExecutionId"
+                        params={{ workflowExecutionId: execution.id }}
+                        className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                      >
+                        <Badge variant={executionStatusBadgeVariant(execution.status)} className="capitalize">
+                          {execution.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatRelativeTime(execution.created_at)}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
 
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-medium">Active workflows</h2>
-          <Link to="/workflows" className="text-sm underline">
-            View all
-          </Link>
+          <Card>
+            <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle>Active workflows</CardTitle>
+              <Link to="/workflows" className="text-xs font-medium text-primary hover:underline">
+                View all
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {activeWorkflows.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No active workflows yet.</p>
+              ) : (
+                <ul className="flex flex-col divide-y divide-border">
+                  {activeWorkflows.slice(0, 5).map((workflow) => (
+                    <li key={workflow.id}>
+                      <Link
+                        to="/workflows/$workflowId"
+                        params={{ workflowId: workflow.id }}
+                        className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                      >
+                        <span className="truncate font-medium">{workflow.name}</span>
+                        <Badge variant={workflowStatusBadgeVariant(workflow.status)} className="capitalize">
+                          {workflow.status}
+                        </Badge>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         </div>
-        {activeWorkflows.length === 0 ? (
-          <p className="text-sm text-neutral-500">No active workflows yet.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {activeWorkflows.slice(0, 5).map((workflow) => (
-              <li key={workflow.id}>
-                <Link
-                  to="/workflows/$workflowId"
-                  params={{ workflowId: workflow.id }}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3 text-sm hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
-                >
-                  <span className="truncate font-medium">{workflow.name}</span>
-                  <span className={`text-xs capitalize ${workflowStatusColor(workflow.status)}`}>
-                    {workflow.status}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </main>
+      </div>
+    </AppShell>
   );
 }

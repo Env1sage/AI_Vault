@@ -1,14 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import type { WorkflowExecution, WorkflowExecutionDetail } from "@vault/types";
+import { ChevronLeft, Pause, Play, XCircle } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell/app-shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiClient } from "@/lib/api-client";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import {
-  executionStatusColor,
+  executionStatusBadgeVariant,
   isActiveExecutionStatus,
-  nodeExecutionStatusColor,
+  nodeExecutionStatusBadgeVariant,
 } from "@/lib/workflow-style";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -62,121 +68,130 @@ function WorkflowExecutionDetailPage() {
   const anyActionError = cancelMutation.error ?? pauseMutation.error ?? resumeMutation.error;
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
-      <Link to="/workflow-executions" className="text-sm underline">
-        ← Back to Execution History
-      </Link>
+    <AppShell title="Workflow execution">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <Link
+          to="/workflow-executions"
+          className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" /> Back to Execution History
+        </Link>
 
-      {detailQuery.isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-      {detailQuery.isError && (
-        <p className="text-sm text-red-600">Couldn't load this execution.</p>
-      )}
+        {detailQuery.isLoading && <Skeleton className="h-56 rounded-2xl" />}
+        {detailQuery.isError && (
+          <p className="text-sm text-destructive">Couldn&rsquo;t load this execution.</p>
+        )}
 
-      {execution && (
-        <>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className={`font-medium capitalize ${executionStatusColor(execution.status)}`}>
-                {execution.status}
-              </span>
-              <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs capitalize dark:bg-neutral-900">
-                {execution.trigger_type} trigger
-              </span>
-            </div>
-            <h1 className="text-xl font-semibold">Workflow execution</h1>
-            {execution.error && <p className="mt-1 text-sm text-red-600">{execution.error}</p>}
-            <Link
-              to="/workflows/$workflowId"
-              params={{ workflowId: execution.workflow_id }}
-              className="text-sm underline"
-            >
-              view workflow
-            </Link>
-          </div>
-
-          {canManage && isActiveExecutionStatus(execution.status) && (
-            <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-              <h2 className="mb-3 font-medium">Controls</h2>
-              <div className="flex flex-wrap gap-2">
-                {execution.status === "running" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={anyActionPending}
-                    onClick={() => pauseMutation.mutate()}
-                  >
-                    Pause
-                  </Button>
-                )}
-                {execution.status === "paused" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={anyActionPending}
-                    onClick={() => resumeMutation.mutate()}
-                  >
-                    Resume
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={anyActionPending}
-                  onClick={() => cancelMutation.mutate()}
-                >
-                  Cancel
-                </Button>
+        {execution && (
+          <>
+            <Card clay className="p-6">
+              <div className="flex items-center gap-2">
+                <Badge variant={executionStatusBadgeVariant(execution.status)} className="capitalize">
+                  {execution.status}
+                </Badge>
+                <Badge variant="outline" className="capitalize">
+                  {execution.trigger_type} trigger
+                </Badge>
               </div>
-              {anyActionError && (
-                <p className="mt-2 text-sm text-red-600">
-                  {anyActionError instanceof ApiError
-                    ? anyActionError.message
-                    : "Couldn't update this execution."}
-                </p>
-              )}
-            </section>
-          )}
+              <h1 className="mt-2 text-lg font-semibold">Workflow execution</h1>
+              {execution.error && <p className="mt-1 text-sm text-destructive">{execution.error}</p>}
+              <Link
+                to="/workflows/$workflowId"
+                params={{ workflowId: execution.workflow_id }}
+                className="text-sm text-primary hover:underline"
+              >
+                view workflow
+              </Link>
+            </Card>
 
-          <section>
-            <h2 className="mb-3 font-medium">
-              Execution log ({execution.node_executions.length} nodes run)
-            </h2>
-            {execution.node_executions.length === 0 ? (
-              <p className="text-sm text-neutral-500">No nodes have run yet for this execution.</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {execution.node_executions.map((nodeExecution) => (
-                  <li
-                    key={nodeExecution.id}
-                    className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span
-                        className={`font-medium capitalize ${nodeExecutionStatusColor(nodeExecution.status)}`}
+            {canManage && isActiveExecutionStatus(execution.status) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Controls</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {execution.status === "running" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={anyActionPending}
+                        onClick={() => pauseMutation.mutate()}
                       >
-                        {nodeExecution.status.replace(/_/g, " ")}
-                      </span>
-                      {nodeExecution.started_at && (
-                        <span className="text-xs text-neutral-400">
-                          {formatRelativeTime(nodeExecution.started_at)}
-                        </span>
-                      )}
-                    </div>
-                    {nodeExecution.error && (
-                      <p className="text-xs text-red-600">{nodeExecution.error}</p>
+                        <Pause className="size-4" /> {pauseMutation.isPending ? "Pausing…" : "Pause"}
+                      </Button>
                     )}
-                    {Object.keys(nodeExecution.output_context).length > 0 && (
-                      <pre className="mt-1 overflow-x-auto rounded bg-neutral-100 p-2 text-xs dark:bg-neutral-900">
-                        {JSON.stringify(nodeExecution.output_context, null, 2)}
-                      </pre>
+                    {execution.status === "paused" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={anyActionPending}
+                        onClick={() => resumeMutation.mutate()}
+                      >
+                        <Play className="size-4" /> {resumeMutation.isPending ? "Resuming…" : "Resume"}
+                      </Button>
                     )}
-                  </li>
-                ))}
-              </ul>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={anyActionPending}
+                      onClick={() => cancelMutation.mutate()}
+                    >
+                      <XCircle className="size-4" /> {cancelMutation.isPending ? "Cancelling…" : "Cancel"}
+                    </Button>
+                  </div>
+                  {anyActionError && (
+                    <p className="mt-2 text-sm text-destructive">
+                      {anyActionError instanceof ApiError
+                        ? anyActionError.message
+                        : "Couldn't update this execution."}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             )}
-          </section>
-        </>
-      )}
-    </main>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Execution log ({execution.node_executions.length} nodes run)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {execution.node_executions.length === 0 ? (
+                  <EmptyState title="No nodes have run yet" description="Check back shortly." />
+                ) : (
+                  <ul className="flex flex-col divide-y divide-border">
+                    {execution.node_executions.map((nodeExecution) => (
+                      <li key={nodeExecution.id} className="py-2.5 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <Badge
+                            variant={nodeExecutionStatusBadgeVariant(nodeExecution.status)}
+                            className="capitalize"
+                          >
+                            {nodeExecution.status.replace(/_/g, " ")}
+                          </Badge>
+                          {nodeExecution.started_at && (
+                            <span className="text-xs text-muted-foreground">
+                              {formatRelativeTime(nodeExecution.started_at)}
+                            </span>
+                          )}
+                        </div>
+                        {nodeExecution.error && (
+                          <p className="mt-1 text-xs text-destructive">{nodeExecution.error}</p>
+                        )}
+                        {Object.keys(nodeExecution.output_context).length > 0 && (
+                          <pre className="mt-1.5 overflow-x-auto rounded-lg bg-secondary p-2 text-xs">
+                            {JSON.stringify(nodeExecution.output_context, null, 2)}
+                          </pre>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </AppShell>
   );
 }

@@ -24,6 +24,7 @@ class ExtractiveCompletionProvider:
     nothing that calls `AIGateway.complete()` changes."""
 
     name = "extractive_fallback"
+    model_name = "none"
 
     def complete(
         self, *, messages: list[Message], context: str | None, max_tokens: int

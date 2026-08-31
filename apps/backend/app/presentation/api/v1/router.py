@@ -11,11 +11,13 @@ from app.presentation.api.v1.enrichment import enrichment_router
 from app.presentation.api.v1.execution_jobs import execution_jobs_router
 from app.presentation.api.v1.execution_plans import execution_plans_router
 from app.presentation.api.v1.files import files_router
+from app.presentation.api.v1.intelligence import intelligence_router
 from app.presentation.api.v1.notifications import notifications_router
 from app.presentation.api.v1.organizations import organizations_router
 from app.presentation.api.v1.recommendations import recommendations_router
 from app.presentation.api.v1.scans import scans_router
 from app.presentation.api.v1.search import search_router
+from app.presentation.api.v1.storage import storage_router
 from app.presentation.api.v1.users import users_router
 from app.presentation.api.v1.version import version_router
 from app.presentation.api.v1.workflow_executions import workflow_executions_router
@@ -32,6 +34,7 @@ v1_router.include_router(scans_router)
 v1_router.include_router(enrichment_router)
 v1_router.include_router(files_router)
 v1_router.include_router(embedding_router)
+v1_router.include_router(intelligence_router)
 v1_router.include_router(search_router)
 v1_router.include_router(conversations_router)
 v1_router.include_router(dashboard_router)
@@ -44,3 +47,4 @@ v1_router.include_router(workflow_executions_router)
 v1_router.include_router(workflow_policies_router)
 v1_router.include_router(notifications_router)
 v1_router.include_router(automation_templates_router)
+v1_router.include_router(storage_router)

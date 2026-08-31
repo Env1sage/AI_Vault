@@ -33,6 +33,18 @@ class UnauthorizedError(VaultError):
     code = "unauthorized"
 
 
+class ReauthRequiredError(UnauthorizedError):
+    """A connector's refresh token was rejected by the provider as expired or
+    revoked (Google's `invalid_grant`) — a *permanent* failure distinct from
+    a transient/misconfigured auth error: no retry can ever succeed, and the
+    only fix is the user reconnecting. Subclasses `UnauthorizedError` so
+    existing `except UnauthorizedError` call sites keep working unchanged;
+    callers that need to react specifically (mark a connector
+    REAUTH_REQUIRED rather than a generic ERROR) catch this narrower type."""
+
+    code = "reauth_required"
+
+
 class ForbiddenError(VaultError):
     """Authenticated, but the identified user's role doesn't permit this
     action — distinct from UnauthorizedError (Handbook §13.1: Authentication

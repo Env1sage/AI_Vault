@@ -8,6 +8,7 @@ from vault_shared import (
     ConflictError,
     DependencyUnavailableError,
     NotFoundError,
+    ReauthRequiredError,
     UnauthorizedError,
     get_logger,
 )
@@ -155,6 +156,16 @@ class ConnectorService:
         try:
             access_token = self.get_valid_access_token(connector)
             account_info = self._oauth_client.fetch_account_info(access_token=access_token)
+        except ReauthRequiredError as exc:
+            self._connectors.mark_reauth_required(connector, error=str(exc))
+            self._audit_logs.record(
+                event_type="connector_reauth_required",
+                organization_id=connector.organization_id,
+                metadata={"provider": connector.provider, "reason": str(exc)},
+                ip_address=ip_address,
+            )
+            self._db.commit()
+            return connector
         except (
             NotFoundError,
             UnauthorizedError,

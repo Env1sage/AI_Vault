@@ -71,6 +71,12 @@ class StorageConnectorRepository:
         connector.last_error = error[:1024]
         self._session.flush()
 
+    def mark_reauth_required(self, connector: StorageConnector, *, error: str) -> None:
+        connector.status = ConnectorStatus.REAUTH_REQUIRED
+        connector.last_failed_at = datetime.now(UTC)
+        connector.last_error = error[:1024]
+        self._session.flush()
+
     def mark_disconnected(self, connector: StorageConnector) -> None:
         connector.status = ConnectorStatus.DISCONNECTED
         self._session.flush()

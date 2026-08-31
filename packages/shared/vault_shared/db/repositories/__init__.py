@@ -1,3 +1,6 @@
+from vault_shared.db.repositories.ai_provider_config_repository import (
+    AIProviderConfigRepository,
+)
 from vault_shared.db.repositories.approval_decision_repository import (
     ApprovalDecisionRepository,
 )
@@ -17,6 +20,7 @@ from vault_shared.db.repositories.conversation_repository import ConversationRep
 from vault_shared.db.repositories.dashboard_snapshot_repository import (
     DashboardSnapshotRepository,
 )
+from vault_shared.db.repositories.duplicate_group_repository import DuplicateGroupRepository
 from vault_shared.db.repositories.embedding_event_repository import EmbeddingEventRepository
 from vault_shared.db.repositories.embedding_job_repository import EmbeddingJobRepository
 from vault_shared.db.repositories.embedding_progress_repository import (
@@ -37,11 +41,21 @@ from vault_shared.db.repositories.file_classification_repository import (
     FileClassificationRepository,
 )
 from vault_shared.db.repositories.file_extraction_repository import FileExtractionRepository
+from vault_shared.db.repositories.file_intelligence_repository import (
+    FileIntelligenceRepository,
+)
 from vault_shared.db.repositories.file_metadata_repository import FileMetadataRepository
 from vault_shared.db.repositories.file_relationship_repository import FileRelationshipRepository
 from vault_shared.db.repositories.file_repository import FileRepository
 from vault_shared.db.repositories.folder_repository import FolderRepository
 from vault_shared.db.repositories.insight_record_repository import InsightRecordRepository
+from vault_shared.db.repositories.intelligence_event_repository import (
+    IntelligenceEventRepository,
+)
+from vault_shared.db.repositories.intelligence_job_repository import IntelligenceJobRepository
+from vault_shared.db.repositories.intelligence_progress_repository import (
+    IntelligenceProgressRepository,
+)
 from vault_shared.db.repositories.knowledge_attribute_repository import (
     KnowledgeAttributeRepository,
 )
@@ -62,6 +76,15 @@ from vault_shared.db.repositories.scan_job_repository import ScanJobRepository
 from vault_shared.db.repositories.scan_progress_repository import ScanProgressRepository
 from vault_shared.db.repositories.scheduler_job_repository import SchedulerJobRepository
 from vault_shared.db.repositories.search_session_repository import SearchSessionRepository
+from vault_shared.db.repositories.storage_analysis_event_repository import (
+    StorageAnalysisEventRepository,
+)
+from vault_shared.db.repositories.storage_analysis_job_repository import (
+    StorageAnalysisJobRepository,
+)
+from vault_shared.db.repositories.storage_analysis_snapshot_repository import (
+    StorageAnalysisSnapshotRepository,
+)
 from vault_shared.db.repositories.storage_connector_repository import (
     StorageConnectorRepository,
 )
@@ -80,6 +103,7 @@ from vault_shared.db.repositories.workflow_trigger_repository import WorkflowTri
 from vault_shared.db.repositories.workflow_version_repository import WorkflowVersionRepository
 
 __all__ = [
+    "AIProviderConfigRepository",
     "ApprovalDecisionRepository",
     "ApprovalRequestRepository",
     "AuditLogRepository",
@@ -89,6 +113,7 @@ __all__ = [
     "ConversationMessageRepository",
     "ConversationRepository",
     "DashboardSnapshotRepository",
+    "DuplicateGroupRepository",
     "EmbeddingEventRepository",
     "EmbeddingJobRepository",
     "EmbeddingProgressRepository",
@@ -103,11 +128,15 @@ __all__ = [
     "ExecutionStepRepository",
     "FileClassificationRepository",
     "FileExtractionRepository",
+    "FileIntelligenceRepository",
     "FileMetadataRepository",
     "FileRelationshipRepository",
     "FileRepository",
     "FolderRepository",
     "InsightRecordRepository",
+    "IntelligenceEventRepository",
+    "IntelligenceJobRepository",
+    "IntelligenceProgressRepository",
     "KnowledgeAttributeRepository",
     "NotificationRepository",
     "OrganizationRepository",
@@ -122,6 +151,9 @@ __all__ = [
     "ScanProgressRepository",
     "SchedulerJobRepository",
     "SearchSessionRepository",
+    "StorageAnalysisEventRepository",
+    "StorageAnalysisJobRepository",
+    "StorageAnalysisSnapshotRepository",
     "StorageConnectorRepository",
     "StorageSourceRepository",
     "UserRepository",

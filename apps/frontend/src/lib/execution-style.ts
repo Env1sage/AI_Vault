@@ -79,6 +79,68 @@ export function riskLevelColor(risk: ExecutionRiskLevel): string {
   }
 }
 
+type BadgeVariant = "default" | "primary" | "ai" | "success" | "warning" | "destructive" | "outline";
+
+export function planStatusBadgeVariant(status: ExecutionPlanStatus): BadgeVariant {
+  switch (status) {
+    case "completed":
+    case "approved":
+      return "success";
+    case "failed":
+    case "rejected":
+      return "destructive";
+    case "partially_completed":
+    case "changes_requested":
+      return "warning";
+    case "executing":
+      return "primary";
+    default:
+      return "default";
+  }
+}
+
+export function jobStatusBadgeVariant(status: ExecutionJobStatus): BadgeVariant {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "destructive";
+    case "partially_completed":
+    case "paused":
+      return "warning";
+    case "running":
+      return "primary";
+    default:
+      return "default";
+  }
+}
+
+export function approvalStatusBadgeVariant(status: ApprovalStatus): BadgeVariant {
+  switch (status) {
+    case "approved":
+      return "success";
+    case "rejected":
+      return "destructive";
+    case "changes_requested":
+      return "warning";
+    case "pending":
+      return "primary";
+    default:
+      return "default";
+  }
+}
+
+export function riskLevelBadgeVariant(risk: ExecutionRiskLevel): BadgeVariant {
+  switch (risk) {
+    case "high":
+      return "destructive";
+    case "medium":
+      return "warning";
+    default:
+      return "default";
+  }
+}
+
 export function actionTypeLabel(actionType: string): string {
   switch (actionType) {
     case "move_file":

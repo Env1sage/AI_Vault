@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from vault_shared import ValidationError, VaultError, get_logger, get_settings
 from vault_shared.ai_gateway import get_ai_gateway
 from vault_shared.ai_gateway.interfaces import Message
+from vault_shared.ai_gateway.org_completion_provider import resolve_org_completion_provider
 from vault_shared.db.models import (
     ApprovalStatus,
     Recommendation,
@@ -91,6 +92,19 @@ class WorkflowExecutionService:
                 extra={"workflow_execution_id": str(workflow_execution_id)},
             )
             return
+
+        # An org's own AI provider config (if any) takes over for this
+        # execution's AI-evaluation node calls — resolved once, up front,
+        # for consistency with `ConversationService`/`IntelligenceService`
+        # ("the org's own key powers all AI features"). One
+        # `WorkflowExecutionService` instance serves exactly one `run()`
+        # call (a fresh instance per Celery task), so reassigning
+        # `self._ai_gateway` here is safe.
+        org_completion_provider = resolve_org_completion_provider(
+            self._db, execution.organization_id
+        )
+        if org_completion_provider is not None:
+            self._ai_gateway = self._ai_gateway.with_completion_provider(org_completion_provider)
 
         version = self._versions.get_by_id(execution.workflow_version_id)
         if version is None:

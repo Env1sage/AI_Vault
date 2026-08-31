@@ -84,6 +84,74 @@ export function notificationStatusColor(status: NotificationStatus): string {
   }
 }
 
+type BadgeVariant = "default" | "primary" | "ai" | "success" | "warning" | "destructive" | "outline";
+
+export function workflowStatusBadgeVariant(status: WorkflowStatus): BadgeVariant {
+  switch (status) {
+    case "active":
+      return "success";
+    case "paused":
+      return "warning";
+    default:
+      return "default";
+  }
+}
+
+export function executionStatusBadgeVariant(status: WorkflowExecutionStatus): BadgeVariant {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "destructive";
+    case "running":
+      return "primary";
+    case "paused":
+      return "warning";
+    default:
+      return "default";
+  }
+}
+
+export function nodeExecutionStatusBadgeVariant(status: WorkflowNodeExecutionStatus): BadgeVariant {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "destructive";
+    case "waiting_approval":
+    case "waiting_delay":
+      return "warning";
+    case "running":
+      return "primary";
+    default:
+      return "default";
+  }
+}
+
+export function policyStatusBadgeVariant(status: WorkflowPolicyStatus): BadgeVariant {
+  switch (status) {
+    case "published":
+      return "success";
+    case "draft":
+      return "warning";
+    default:
+      return "default";
+  }
+}
+
+export function notificationStatusBadgeVariant(status: NotificationStatus): BadgeVariant {
+  switch (status) {
+    case "sent":
+      return "success";
+    case "failed":
+      return "destructive";
+    case "pending":
+      return "warning";
+    default:
+      return "default";
+  }
+}
+
 export function nodeTypeLabel(nodeType: string): string {
   switch (nodeType) {
     case "trigger":

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from vault_shared.db.session import Base
 
 if TYPE_CHECKING:
+    from vault_shared.db.models.ai_provider_config import AIProviderConfig
     from vault_shared.db.models.user import User
 
 
@@ -29,3 +30,6 @@ class Organization(Base):
     )
 
     users: Mapped[list["User"]] = relationship(back_populates="organization")
+    ai_provider_config: Mapped["AIProviderConfig | None"] = relationship(
+        back_populates="organization", uselist=False, cascade="all, delete-orphan"
+    )

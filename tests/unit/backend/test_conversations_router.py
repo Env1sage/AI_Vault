@@ -29,6 +29,7 @@ class _FakeMessage:
         self.retrieval_method = "semantic" if role == "assistant" else None
         self.provider = "extractive_fallback" if role == "assistant" else None
         self.token_usage = None
+        self.tool_name = None
         self.created_at = datetime.now(UTC)
 
 
@@ -39,6 +40,14 @@ class _FakeCitation:
         self.snippet = "Relevant excerpt…"
         self.confidence = 0.72
         self.retrieval_method = "semantic"
+
+
+class _FakeFile:
+    def __init__(self, *, id: uuid.UUID) -> None:
+        self.id = id
+        self.name = "Payroll.pdf"
+        self.size_bytes = 204800
+        self.mime_type = "application/pdf"
 
 
 @pytest.fixture
@@ -75,11 +84,13 @@ def test_start_conversation_creates_the_first_turn(as_member, fake_conversation_
     user_message = _FakeMessage(role="user", content="What files do we have about payroll?")
     assistant_message = _FakeMessage(role="assistant", content="Here's what I found…")
     citation = _FakeCitation()
+    file = _FakeFile(id=citation.file_id)
     fake_conversation_service.ask.return_value = AssistantTurn(
         conversation=conversation,
         user_message=user_message,
         assistant_message=assistant_message,
         citations=[citation],
+        files_by_id={file.id: file},
     )
 
     response = client.post(
@@ -92,6 +103,8 @@ def test_start_conversation_creates_the_first_turn(as_member, fake_conversation_
     assert body["assistant_message"]["content"] == "Here's what I found…"
     assert len(body["assistant_message"]["citations"]) == 1
     assert body["assistant_message"]["citations"][0]["file_id"] == str(citation.file_id)
+    assert body["assistant_message"]["citations"][0]["file_name"] == "Payroll.pdf"
+    assert body["assistant_message"]["citations"][0]["file_size_bytes"] == 204800
     call_kwargs = fake_conversation_service.ask.call_args.kwargs
     assert call_kwargs["conversation_id"] is None
 
@@ -110,6 +123,7 @@ def test_send_message_continues_an_existing_conversation(as_member, fake_convers
         user_message=_FakeMessage(role="user", content="And last quarter?"),
         assistant_message=_FakeMessage(role="assistant", content="Last quarter…"),
         citations=[],
+        files_by_id={},
     )
 
     response = client.post(
@@ -137,10 +151,12 @@ def test_get_conversation_includes_messages_and_citations(as_member, fake_conver
     conversation = _FakeConversation()
     assistant_message = _FakeMessage(role="assistant", content="Here's what I found…")
     citation = _FakeCitation()
+    file = _FakeFile(id=citation.file_id)
     fake_conversation_service.get_detail.return_value = ConversationDetail(
         conversation=conversation,
         messages=[assistant_message],
         citations_by_message_id={assistant_message.id: [citation]},
+        files_by_id={file.id: file},
     )
 
     response = client.get(f"/v1/conversations/{conversation.id}")
