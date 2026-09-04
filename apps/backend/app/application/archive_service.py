@@ -30,6 +30,12 @@ class ArchiveService:
             organization_id, limit=limit, offset=offset
         )
 
+    def list_archived_file_ids(self, organization_id: uuid.UUID) -> set[uuid.UUID]:
+        """Backs the Trash page's per-row "already backed up?" indicator
+        and the permanent-delete eligibility gate it reflects (see
+        `ExecutionPlanService.create_permanent_delete_plan`)."""
+        return self._archive_jobs.list_archived_file_ids(organization_id)
+
     def get_owned(self, archive_job_id: uuid.UUID, *, organization_id: uuid.UUID) -> ArchiveJob:
         archive_job = self._archive_jobs.get_owned(archive_job_id, organization_id=organization_id)
         if archive_job is None:

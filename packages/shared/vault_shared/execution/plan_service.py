@@ -15,6 +15,7 @@ from vault_shared.db.models import (
 )
 from vault_shared.db.repositories import (
     ApprovalRequestRepository,
+    ArchiveJobRepository,
     AuditLogRepository,
     DuplicateGroupRepository,
     ExecutionAuditRepository,
@@ -95,6 +96,7 @@ class ExecutionPlanService:
         self._steps = ExecutionStepRepository(db)
         self._approvals = ApprovalRequestRepository(db)
         self._files = FileRepository(db)
+        self._archive_jobs = ArchiveJobRepository(db)
         self._execution_audits = ExecutionAuditRepository(db)
         self._audit_logs = AuditLogRepository(db)
 
@@ -257,12 +259,17 @@ class ExecutionPlanService:
         action type there, so a caller can never reach PERMANENT_DELETE by
         accident through the generic path.
 
-        Two things make this safe to expose at all:
+        Three things make this safe to expose at all:
         - Only files already `trashed` (and not yet
           `permanently_deleted_at`) are eligible — you can't permanently
-          delete something PERMANENT_DELETE hasn't already been trashed
-          first, mirroring how you'd have to empty Drive's own Trash by
-          hand.
+          delete something that hasn't already been trashed first,
+          mirroring how you'd have to empty Drive's own Trash by hand.
+        - Only files already backed up by a `COMPLETED` archive
+          (`ArchiveJobRepository.list_archived_file_ids`) are eligible —
+          real deletion is never the only copy of a file's content
+          anywhere; the founder must "Create Archive" it first. A
+          later-deleted archive revokes this eligibility too (see that
+          method's docstring).
         - `rollback_available=False` on the resulting plan. The caller
           (the execution-plans router) is also responsible for never
           auto-approving this action type — approval must always be a
@@ -275,13 +282,17 @@ class ExecutionPlanService:
         candidates = self._files.list_owned_by_organization_including_trashed(
             file_ids, organization_id=organization_id
         )
+        archived_file_ids = self._archive_jobs.list_archived_file_ids(organization_id)
         ordered_files = [
-            file for file in candidates if file.trashed and file.permanently_deleted_at is None
+            file
+            for file in candidates
+            if file.trashed and file.permanently_deleted_at is None and file.id in archived_file_ids
         ]
         if not ordered_files:
             raise ValidationError(
-                "None of the selected files are eligible — only files already in Trash "
-                "(and not already permanently deleted) can be permanently deleted."
+                "None of the selected files are eligible — a file must already be in Trash "
+                "and backed up by a completed archive (Create Archive) before it can be "
+                "permanently deleted."
             )
 
         return self._create_plan_with_approval(
