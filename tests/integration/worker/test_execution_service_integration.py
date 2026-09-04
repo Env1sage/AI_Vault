@@ -159,6 +159,10 @@ class _FakeGoogleDriveClient:
         self.calls.append(("update_app_properties", file_id))
         return self._files[file_id]
 
+    def delete_file(self, *, access_token: str, file_id: str) -> None:
+        self.calls.append(("delete_file", file_id))
+        self._files.pop(file_id, None)
+
 
 class _FakeObjectStorageClient:
     """In-memory stand-in — the Phase 8 fakes/mocks-only rule (ADR-020)
@@ -451,6 +455,108 @@ def test_rollback_restores_the_file_and_marks_plan_rolled_back(db: Session) -> N
     rollback_record = RollbackRecordRepository(db).get_by_step(step.id)
     assert rollback_record.rolled_back is True
     assert rollback_record.rolled_back_by_user_id == user.id
+
+
+@requires_infra
+def test_forward_execution_permanently_deletes_an_already_trashed_file(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(
+        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    file = _provision_file(db, connector_id=connector.id, name="Old.txt", provider_file_id="f-old")
+    FileRepository(db).mark_trashed(file, trashed=True)
+    plan = ExecutionPlanRepository(db).create(
+        organization_id=user.organization_id,
+        recommendation_id=None,
+        duplicate_group_id=None,
+        created_by_user_id=user.id,
+        target_provider="google_workspace",
+        estimated_impact="1 file",
+        estimated_storage_savings_bytes=100,
+        risk_level="low",
+        rollback_available=False,
+        required_permissions=[DRIVE_WRITE_SCOPE],
+    )
+    db.commit()
+    step = _provision_step(
+        db, plan_id=plan.id, file_id=file.id, action_type=ExecutionActionType.PERMANENT_DELETE
+    )
+    job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
+
+    drive = _FakeGoogleDriveClient(files={"f-old": _drive_file(file_id="f-old", trashed=True)})
+    service = ExecutionService(
+        db,
+        drive_client=drive,
+        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
+        object_storage_client=_FakeObjectStorageClient(),
+    )
+
+    service.run(job.id)
+
+    completed_job = ExecutionJobRepository(db).get_by_id(job.id)
+    assert completed_job.status == ExecutionJobStatus.COMPLETED
+
+    completed_step = ExecutionStepRepository(db).get_by_id(step.id)
+    assert completed_step.status == ExecutionStepStatus.COMPLETED
+
+    result = ExecutionResultRepository(db).get_by_job_and_step(
+        execution_job_id=job.id, execution_step_id=step.id
+    )
+    assert result.status == ExecutionResultStatus.SUCCESS
+    assert result.verification_status == VerificationStatus.VERIFIED
+
+    assert "f-old" not in drive._files
+    assert ("delete_file", "f-old") in drive.calls
+
+    deleted_file = FileRepository(db).get_by_id(file.id)
+    assert deleted_file.permanently_deleted_at is not None
+
+
+@requires_infra
+def test_rollback_of_a_permanent_delete_step_fails_without_crashing(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(
+        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
+    )
+    file = _provision_file(db, connector_id=connector.id, name="Old.txt", provider_file_id="f-old")
+    FileRepository(db).mark_trashed(file, trashed=True)
+    plan = ExecutionPlanRepository(db).create(
+        organization_id=user.organization_id,
+        recommendation_id=None,
+        duplicate_group_id=None,
+        created_by_user_id=user.id,
+        target_provider="google_workspace",
+        estimated_impact="1 file",
+        estimated_storage_savings_bytes=100,
+        risk_level="low",
+        rollback_available=False,
+        required_permissions=[DRIVE_WRITE_SCOPE],
+    )
+    db.commit()
+    _provision_step(
+        db, plan_id=plan.id, file_id=file.id, action_type=ExecutionActionType.PERMANENT_DELETE
+    )
+    forward_job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
+
+    drive = _FakeGoogleDriveClient(files={"f-old": _drive_file(file_id="f-old", trashed=True)})
+    service = ExecutionService(
+        db,
+        drive_client=drive,
+        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
+        object_storage_client=_FakeObjectStorageClient(),
+    )
+    service.run(forward_job.id)
+
+    # The backend router never lets this happen (rollback_available=False
+    # blocks the request before a job exists) — this exercises the
+    # engine's own defense-in-depth directly.
+    rollback_job = _provision_job(
+        db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id, is_rollback=True
+    )
+    service.run(rollback_job.id)
+
+    failed_rollback_job = ExecutionJobRepository(db).get_by_id(rollback_job.id)
+    assert failed_rollback_job.status == ExecutionJobStatus.FAILED
 
 
 @requires_infra

@@ -49,6 +49,7 @@ import { Route as StorageIntelligenceDuplicatesRouteImport } from './routes/stor
 import { Route as StorageIntelligenceInactiveFilesRouteImport } from './routes/storage-intelligence.inactive-files'
 import { Route as StorageIntelligenceLargeFilesRouteImport } from './routes/storage-intelligence.large-files'
 import { Route as StorageIntelligenceOldFilesRouteImport } from './routes/storage-intelligence.old-files'
+import { Route as TrashIndexRouteImport } from './routes/trash.index'
 import { Route as WorkflowExecutionsWorkflowExecutionIdRouteImport } from './routes/workflow-executions.$workflowExecutionId'
 import { Route as WorkflowsIndexRouteImport } from './routes/workflows.index'
 import { Route as WorkflowsWorkflowIdRouteImport } from './routes/workflows.$workflowId'
@@ -267,6 +268,11 @@ const StorageIntelligenceOldFilesRoute =
     path: '/old-files',
     getParentRoute: () => StorageIntelligenceRoute,
   } as any)
+const TrashIndexRoute = TrashIndexRouteImport.update({
+  id: '/trash/',
+  path: '/trash/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WorkflowExecutionsWorkflowExecutionIdRoute =
   WorkflowExecutionsWorkflowExecutionIdRouteImport.update({
     id: '/$workflowExecutionId',
@@ -357,6 +363,7 @@ export interface FileRoutesByFullPath {
   '/files/': typeof FilesIndexRoute
   '/recommendations/': typeof RecommendationsIndexRoute
   '/storage-intelligence/': typeof StorageIntelligenceIndexRoute
+  '/trash/': typeof TrashIndexRoute
   '/workflows/': typeof WorkflowsIndexRoute
   '/connectors/google/callback': typeof ConnectorsGoogleCallbackRoute
   '/storage-intelligence/duplicates/$groupId': typeof StorageIntelligenceDuplicatesGroupIdRoute
@@ -398,6 +405,7 @@ export interface FileRoutesByTo {
   '/files': typeof FilesIndexRoute
   '/recommendations': typeof RecommendationsIndexRoute
   '/storage-intelligence': typeof StorageIntelligenceIndexRoute
+  '/trash': typeof TrashIndexRoute
   '/workflows': typeof WorkflowsIndexRoute
   '/connectors/google/callback': typeof ConnectorsGoogleCallbackRoute
   '/storage-intelligence/duplicates/$groupId': typeof StorageIntelligenceDuplicatesGroupIdRoute
@@ -449,6 +457,7 @@ export interface FileRoutesById {
   '/files/': typeof FilesIndexRoute
   '/recommendations/': typeof RecommendationsIndexRoute
   '/storage-intelligence/': typeof StorageIntelligenceIndexRoute
+  '/trash/': typeof TrashIndexRoute
   '/workflows/': typeof WorkflowsIndexRoute
   '/connectors/google/callback': typeof ConnectorsGoogleCallbackRoute
   '/storage-intelligence/duplicates/$groupId': typeof StorageIntelligenceDuplicatesGroupIdRoute
@@ -501,6 +510,7 @@ export interface FileRouteTypes {
     | '/files/'
     | '/recommendations/'
     | '/storage-intelligence/'
+    | '/trash/'
     | '/workflows/'
     | '/connectors/google/callback'
     | '/storage-intelligence/duplicates/$groupId'
@@ -542,6 +552,7 @@ export interface FileRouteTypes {
     | '/files'
     | '/recommendations'
     | '/storage-intelligence'
+    | '/trash'
     | '/workflows'
     | '/connectors/google/callback'
     | '/storage-intelligence/duplicates/$groupId'
@@ -592,6 +603,7 @@ export interface FileRouteTypes {
     | '/files/'
     | '/recommendations/'
     | '/storage-intelligence/'
+    | '/trash/'
     | '/workflows/'
     | '/connectors/google/callback'
     | '/storage-intelligence/duplicates/$groupId'
@@ -625,6 +637,7 @@ export interface RootRouteChildren {
   WorkflowsRoute: typeof WorkflowsRouteWithChildren
   ArchivesArchiveIdRoute: typeof ArchivesArchiveIdRoute
   ArchivesIndexRoute: typeof ArchivesIndexRoute
+  TrashIndexRoute: typeof TrashIndexRoute
   ConnectorsGoogleCallbackRoute: typeof ConnectorsGoogleCallbackRoute
 }
 
@@ -910,6 +923,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StorageIntelligenceOldFilesRouteImport
       parentRoute: typeof StorageIntelligenceRoute
     }
+    '/trash/': {
+      id: '/trash/'
+      path: '/trash'
+      fullPath: '/trash/'
+      preLoaderRoute: typeof TrashIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/workflow-executions/$workflowExecutionId': {
       id: '/workflow-executions/$workflowExecutionId'
       path: '/$workflowExecutionId'
@@ -1139,6 +1159,7 @@ const rootRouteChildren: RootRouteChildren = {
   WorkflowsRoute: WorkflowsRouteWithChildren,
   ArchivesArchiveIdRoute: ArchivesArchiveIdRoute,
   ArchivesIndexRoute: ArchivesIndexRoute,
+  TrashIndexRoute: TrashIndexRoute,
   ConnectorsGoogleCallbackRoute: ConnectorsGoogleCallbackRoute,
 }
 export const routeTree = rootRouteImport

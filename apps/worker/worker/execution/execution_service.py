@@ -283,7 +283,12 @@ class ExecutionService:
             current = self._drive.get_file(
                 access_token=access_token, file_id=file.provider_file_id
             )
-            if current.trashed:
+            # PERMANENT_DELETE is the one action that *requires* the file
+            # already be trashed (that's its whole eligibility rule, see
+            # ExecutionPlanService.create_permanent_delete_plan) — this
+            # conflict check exists for every other action type, which all
+            # expect the opposite.
+            if current.trashed and step.action_type != ExecutionActionType.PERMANENT_DELETE:
                 raise ConflictError(
                     "File is already trashed outside this platform — nothing to do."
                 )
@@ -407,6 +412,9 @@ class ExecutionService:
             self._drive.update_app_properties(
                 access_token=access_token, file_id=file.provider_file_id, properties=properties
             )
+        elif action_type == ExecutionActionType.PERMANENT_DELETE:
+            self._drive.delete_file(access_token=access_token, file_id=file.provider_file_id)
+            self._files.mark_permanently_deleted(file)
         else:
             raise ValidationError(f"Unsupported action type: {action_type}")
 
@@ -600,6 +608,15 @@ class ExecutionService:
         self._db.commit()
 
     def _verify_forward(self, step: ExecutionStep, *, access_token: str, file: File) -> bool:
+        if step.action_type == ExecutionActionType.PERMANENT_DELETE:
+            # The success signal here is the opposite of every other
+            # action's: a 404 from Drive *is* verification, not a failure.
+            try:
+                self._drive.get_file(access_token=access_token, file_id=file.provider_file_id)
+            except NotFoundError:
+                return True
+            return False
+
         current = self._drive.get_file(access_token=access_token, file_id=file.provider_file_id)
         if step.action_type in _TRASHABLE_ACTIONS:
             return current.trashed is True
@@ -768,6 +785,13 @@ class ExecutionService:
             # No Drive call — CREATE_ARCHIVE never mutated Drive, only read
             # it, so `file` isn't touched here at all.
             self._rollback_archive(pre_state["archive_job_id"])
+        elif action_type == ExecutionActionType.PERMANENT_DELETE:
+            # Unreachable in practice — every permanent-delete plan is
+            # created with rollback_available=False, and
+            # ExecutionJobService.trigger_rollback rejects the request
+            # before a job (and this call) ever exists. Kept as an
+            # explicit, honest failure rather than silently no-op-ing.
+            raise ValidationError("Permanently deleted files cannot be restored.")
         else:
             raise ValidationError(f"Unsupported action type: {action_type}")
 

@@ -247,6 +247,57 @@ class ExecutionPlanService:
             planned_change_by_file_id=planned_change_by_file_id,
         )
 
+    def create_permanent_delete_plan(
+        self, file_ids: list[uuid.UUID], *, organization_id: uuid.UUID, user_id: uuid.UUID
+    ) -> ExecutionPlan:
+        """Real, unrecoverable Drive deletion (`files.delete`) — everything
+        else this class builds is Drive-Trash-reversible. Deliberately kept
+        out of `create_ad_hoc_plan`/`_AD_HOC_ALLOWED_ACTIONS` entirely
+        (its own method, its own validation) rather than one more allowed
+        action type there, so a caller can never reach PERMANENT_DELETE by
+        accident through the generic path.
+
+        Two things make this safe to expose at all:
+        - Only files already `trashed` (and not yet
+          `permanently_deleted_at`) are eligible — you can't permanently
+          delete something PERMANENT_DELETE hasn't already been trashed
+          first, mirroring how you'd have to empty Drive's own Trash by
+          hand.
+        - `rollback_available=False` on the resulting plan. The caller
+          (the execution-plans router) is also responsible for never
+          auto-approving this action type — approval must always be a
+          real, separate human action for something this irreversible."""
+        if not file_ids:
+            raise ValidationError("Select at least one file.")
+        if len(file_ids) > _MAX_AD_HOC_FILES:
+            raise ValidationError(f"Select at most {_MAX_AD_HOC_FILES} files at a time.")
+
+        candidates = self._files.list_owned_by_organization_including_trashed(
+            file_ids, organization_id=organization_id
+        )
+        ordered_files = [
+            file for file in candidates if file.trashed and file.permanently_deleted_at is None
+        ]
+        if not ordered_files:
+            raise ValidationError(
+                "None of the selected files are eligible — only files already in Trash "
+                "(and not already permanently deleted) can be permanently deleted."
+            )
+
+        return self._create_plan_with_approval(
+            organization_id=organization_id,
+            user_id=user_id,
+            recommendation_id=None,
+            duplicate_group_id=None,
+            action_type=ExecutionActionType.PERMANENT_DELETE,
+            ordered_files=ordered_files,
+            audit_metadata={
+                "ad_hoc_action": ExecutionActionType.PERMANENT_DELETE,
+                "requested_file_count": len(file_ids),
+            },
+            rollback_available=False,
+        )
+
     def _create_plan_with_approval(
         self,
         *,
@@ -258,6 +309,7 @@ class ExecutionPlanService:
         ordered_files: list[File],
         audit_metadata: dict,
         planned_change_by_file_id: dict[uuid.UUID, dict] | None = None,
+        rollback_available: bool = True,
     ) -> ExecutionPlan:
         total_bytes = sum(f.size_bytes or 0 for f in ordered_files)
         plan = self._plans.create(
@@ -269,7 +321,7 @@ class ExecutionPlanService:
             estimated_impact=f"{len(ordered_files)} files, ~{human_bytes(total_bytes)}",
             estimated_storage_savings_bytes=total_bytes or None,
             risk_level=self._risk_level_for(len(ordered_files)),
-            rollback_available=True,
+            rollback_available=rollback_available,
             required_permissions=["google_workspace:drive:write"],
         )
         for index, file in enumerate(ordered_files):

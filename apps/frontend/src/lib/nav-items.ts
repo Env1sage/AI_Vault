@@ -14,6 +14,7 @@ import {
   PlayCircle,
   ScanLine,
   Search,
+  Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -57,6 +58,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Scans", to: "/scans", icon: ScanLine },
       { label: "Storage Intelligence", to: "/storage-intelligence", icon: HardDrive },
       { label: "Archives", to: "/archives", icon: Archive },
+      { label: "Trash", to: "/trash", icon: Trash2 },
     ],
   },
   {
