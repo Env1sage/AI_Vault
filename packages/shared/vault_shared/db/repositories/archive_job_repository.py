@@ -84,29 +84,3 @@ class ArchiveJobRepository:
     def mark_deleted(self, archive_job: ArchiveJob) -> None:
         archive_job.status = ArchiveJobStatus.DELETED
         self._session.flush()
-
-    def list_archived_file_ids(self, organization_id: uuid.UUID) -> set[uuid.UUID]:
-        """Every file id backed up by at least one still-`COMPLETED`
-        archive for this org — the eligibility check for `PERMANENT_DELETE`
-        (see `ExecutionPlanService.create_permanent_delete_plan`): a file
-        can only be permanently deleted from Drive once a real backup of
-        it already exists in Vault's own archive storage. A `DELETED`
-        archive no longer counts — deleting the backup revokes the
-        eligibility it granted. Brute-force by design (loads every
-        completed archive's manifest into Python), same acceptance as
-        other org-wide reads in this codebase (e.g.
-        `FileRepository.list_for_organization_with_details`) — fine at
-        reference scale."""
-        jobs = (
-            self._session.query(ArchiveJob)
-            .filter(
-                ArchiveJob.organization_id == organization_id,
-                ArchiveJob.status == ArchiveJobStatus.COMPLETED,
-            )
-            .all()
-        )
-        file_ids: set[uuid.UUID] = set()
-        for job in jobs:
-            for entry in job.manifest:
-                file_ids.add(uuid.UUID(entry["file_id"]))
-        return file_ids

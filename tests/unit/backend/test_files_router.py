@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from app.main import app
 from app.presentation.dependencies.auth import get_current_user
-from app.presentation.dependencies.services import get_archive_service, get_file_service
+from app.presentation.dependencies.services import get_file_service
 from fastapi.testclient import TestClient
 from vault_shared import NotFoundError
 
@@ -112,19 +112,6 @@ def fake_file_service() -> MagicMock:
     app.dependency_overrides[get_file_service] = lambda: service
     yield service
     app.dependency_overrides.pop(get_file_service, None)
-
-
-@pytest.fixture(autouse=True)
-def fake_archive_service() -> MagicMock:
-    """`list_trashed_files` also depends on `ArchiveService` (to flag which
-    trashed files are already backed up) — autouse since every test hitting
-    that endpoint needs it overridden, and a real default (empty set, not
-    a bare MagicMock) so `file.id in archived_ids` never blows up."""
-    service = MagicMock()
-    service.list_archived_file_ids.return_value = set()
-    app.dependency_overrides[get_archive_service] = lambda: service
-    yield service
-    app.dependency_overrides.pop(get_archive_service, None)
 
 
 @pytest.fixture
@@ -336,22 +323,6 @@ def test_list_trashed_files_returns_not_found_for_another_organizations_connecto
     response = client.get(f"/v1/connectors/{uuid.uuid4()}/trash")
 
     assert response.status_code == 404
-
-
-def test_list_trashed_files_flags_which_are_already_archived(
-    as_member, fake_file_service, fake_archive_service
-) -> None:
-    archived = _FakeFile(name="Archived.pdf")
-    not_archived = _FakeFile(name="NotArchived.pdf")
-    fake_file_service.list_trashed_for_connector.return_value = ([archived, not_archived], 2)
-    fake_archive_service.list_archived_file_ids.return_value = {archived.id}
-
-    response = client.get(f"/v1/connectors/{uuid.uuid4()}/trash")
-
-    assert response.status_code == 200
-    items = {item["name"]: item["is_archived"] for item in response.json()["items"]}
-    assert items["Archived.pdf"] is True
-    assert items["NotArchived.pdf"] is False
 
 
 def test_search_folders_requires_authentication(fake_file_service) -> None:

@@ -9,10 +9,6 @@ export interface FileSummary {
   is_shared: boolean;
   owner_email: string | null;
   provider_modified_at: string | null;
-  /** Only ever populated by the Trash listing — whether a completed
-   * archive already backs this file, the eligibility requirement for
-   * permanent deletion. `null`/absent everywhere else. */
-  is_archived?: boolean | null;
 }
 
 export interface FileListResponse {

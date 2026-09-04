@@ -1,19 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
-import type { Connector, ExecutionPlan, FileListResponse } from "@vault/types";
-import { ChevronLeft, ChevronRight, Cloud, FolderArchive, ShieldCheck, Trash2 } from "lucide-react";
+import type { Connector, FileListResponse } from "@vault/types";
+import { ChevronLeft, ChevronRight, Cloud, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/app-shell/app-shell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PermanentDeleteDialog } from "@/components/file-explorer/permanent-delete-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "@/components/ui/toaster";
-import { ApiError, apiClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api-client";
 import { fileTypeIconElement } from "@/lib/file-icon";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatRelativeTime } from "@/lib/format-relative-time";
@@ -34,7 +32,6 @@ function TrashPage() {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
-  const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const canManage = user?.role === "owner" || user?.role === "admin";
 
@@ -53,9 +50,7 @@ function TrashPage() {
   }
 
   function toggleAll() {
-    setSelected((prev) =>
-      prev.size === archivedFiles.length ? new Set() : new Set(archivedFiles.map((f) => f.id)),
-    );
+    setSelected((prev) => (prev.size === files.length ? new Set() : new Set(files.map((f) => f.id))));
   }
 
   const connectorsQuery = useQuery({
@@ -75,36 +70,9 @@ function TrashPage() {
     enabled: connector !== undefined,
   });
 
-  const createArchiveMutation = useMutation({
-    mutationFn: (fileId: string) =>
-      apiClient.post<ExecutionPlan>("/v1/execution-plans", {
-        file_ids: [fileId],
-        action_type: "create_archive",
-      }),
-    onSuccess: (plan) => {
-      void queryClient.invalidateQueries({ queryKey: ["trash"] });
-      void queryClient.invalidateQueries({ queryKey: ["execution-plans"] });
-      toast.success("Creating a backup now", {
-        description: "Once it completes, this file becomes eligible for permanent deletion.",
-        action: {
-          label: "View progress",
-          onClick: () => {
-            window.location.href = `/execution-plans/${plan.id}`;
-          },
-        },
-      });
-    },
-    onError: (error) => {
-      toast.error(error instanceof ApiError ? error.message : "Couldn't create an archive plan.");
-    },
-  });
-
   const files = trashQuery.data?.items ?? [];
   const total = trashQuery.data?.total ?? 0;
-  // Only an already-archived file is eligible for permanent deletion (the
-  // backend enforces this too) — bulk-select never includes anything else.
-  const archivedFiles = files.filter((f) => f.is_archived);
-  const allSelected = archivedFiles.length > 0 && selected.size === archivedFiles.length;
+  const allSelected = files.length > 0 && selected.size === files.length;
 
   return (
     <AppShell title="Trash">
@@ -114,9 +82,7 @@ function TrashPage() {
           <p className="text-sm text-muted-foreground">
             Files already moved to Google Drive&rsquo;s Trash (via Archive or Remove Duplicate).
             Google keeps counting these against your storage quota until they&rsquo;re permanently
-            deleted here or emptied from Drive&rsquo;s own Trash. A file must be backed up with
-            Create Archive before it can be permanently deleted — nothing is ever deleted with no
-            copy left anywhere.
+            deleted here or emptied from Drive&rsquo;s own Trash.
           </p>
         </div>
 
@@ -165,13 +131,13 @@ function TrashPage() {
 
             {files.length > 0 && (
               <>
-                {canManage && archivedFiles.length > 0 && (
+                {canManage && (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
                     <label className="flex items-center gap-2 text-sm">
                       <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
                       {selected.size > 0
                         ? `${selected.size} selected`
-                        : `Select all ${archivedFiles.length} backed-up file${archivedFiles.length === 1 ? "" : "s"}`}
+                        : `Select all ${files.length} on this page`}
                     </label>
                     {selected.size > 0 && (
                       <div className="flex items-center gap-1.5">
@@ -193,7 +159,7 @@ function TrashPage() {
                       key={file.id}
                       className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm"
                     >
-                      {canManage && file.is_archived && (
+                      {canManage && (
                         <Checkbox
                           checked={selected.has(file.id)}
                           onCheckedChange={() => toggle(file.id)}
@@ -209,15 +175,6 @@ function TrashPage() {
                           <p className="truncate font-medium">{file.name}</p>
                           <p className="truncate text-xs text-muted-foreground">{file.path}</p>
                         </div>
-                        {file.is_archived ? (
-                          <Badge variant="success" className="shrink-0">
-                            <ShieldCheck className="size-3" /> Backed up
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="shrink-0">
-                            Not backed up
-                          </Badge>
-                        )}
                       </div>
                       <div className="shrink-0 text-right text-xs text-muted-foreground">
                         <p>{file.size_bytes !== null ? formatBytes(file.size_bytes) : "—"}</p>
@@ -225,30 +182,19 @@ function TrashPage() {
                           <p>Modified {formatRelativeTime(file.provider_modified_at)}</p>
                         )}
                       </div>
-                      {canManage &&
-                        (file.is_archived ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() => {
-                              setSelected(new Set([file.id]));
-                              setConfirming(true);
-                            }}
-                          >
-                            <Trash2 className="size-4" /> Delete forever
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            disabled={createArchiveMutation.isPending}
-                            onClick={() => createArchiveMutation.mutate(file.id)}
-                          >
-                            <FolderArchive className="size-4" /> Create Archive
-                          </Button>
-                        ))}
+                      {canManage && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => {
+                            setSelected(new Set([file.id]));
+                            setConfirming(true);
+                          }}
+                        >
+                          <Trash2 className="size-4" /> Delete forever
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </Card>

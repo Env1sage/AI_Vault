@@ -22,7 +22,6 @@ from vault_shared.db.models import (
 )
 from vault_shared.db.repositories import (
     ApprovalRequestRepository,
-    ArchiveJobRepository,
     ConnectorCredentialsRepository,
     DuplicateGroupRepository,
     ExecutionJobRepository,
@@ -166,53 +165,6 @@ def _provision_recommendation(
         db.flush()
     db.commit()
     return recommendation
-
-
-def _provision_completed_archive(
-    db: Session, *, organization_id: uuid.UUID, user_id: uuid.UUID, file_ids: list[uuid.UUID]
-):
-    """A minimal COMPLETED ArchiveJob backing `file_ids` — the eligibility
-    signal `create_permanent_delete_plan` requires (a file can only be
-    permanently deleted once it's already backed up)."""
-    plan = ExecutionPlanRepository(db).create(
-        organization_id=organization_id,
-        recommendation_id=None,
-        duplicate_group_id=None,
-        created_by_user_id=user_id,
-        target_provider="google_workspace",
-        estimated_impact="test archive",
-        estimated_storage_savings_bytes=None,
-        risk_level="low",
-        rollback_available=True,
-        required_permissions=[],
-    )
-    db.commit()
-    archive_job = ArchiveJobRepository(db).create(
-        organization_id=organization_id,
-        execution_plan_id=plan.id,
-        name="Test Archive",
-        created_by_user_id=user_id,
-    )
-    ArchiveJobRepository(db).mark_completed(
-        archive_job,
-        object_storage_key="archives/test.zip",
-        original_size_bytes=100,
-        compressed_size_bytes=50,
-        file_count=len(file_ids),
-        manifest=[
-            {
-                "file_id": str(fid),
-                "name": "test.pdf",
-                "path": "/test.pdf",
-                "size_bytes": 100,
-                "mime_type": "application/pdf",
-                "checksum_sha256": "abc123",
-            }
-            for fid in file_ids
-        ],
-    )
-    db.commit()
-    return archive_job
 
 
 # ----------------------------------------------------------------------
@@ -641,7 +593,7 @@ def test_create_ad_hoc_plan_rejects_an_empty_selection(db: Session) -> None:
 
 
 @requires_infra
-def test_create_permanent_delete_plan_targets_only_trashed_and_archived_files(db: Session) -> None:
+def test_create_permanent_delete_plan_targets_only_already_trashed_files(db: Session) -> None:
     user = _provision_user(db)
     connector = _provision_connector(
         db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
@@ -649,9 +601,6 @@ def test_create_permanent_delete_plan_targets_only_trashed_and_archived_files(db
     files = FileRepository(db)
     trashed = _provision_file(db, connector_id=connector.id, name="trashed.pdf", provider_file_id="f-a")
     files.mark_trashed(trashed, trashed=True)
-    _provision_completed_archive(
-        db, organization_id=user.organization_id, user_id=user.id, file_ids=[trashed.id]
-    )
     active = _provision_file(db, connector_id=connector.id, name="active.pdf", provider_file_id="f-b")
     service = ExecutionPlanService(db)
 
@@ -677,53 +626,6 @@ def test_create_permanent_delete_plan_rejects_when_nothing_is_eligible(db: Sessi
     with pytest.raises(ValidationError):
         service.create_permanent_delete_plan(
             [active.id], organization_id=user.organization_id, user_id=user.id
-        )
-
-
-@requires_infra
-def test_create_permanent_delete_plan_rejects_a_trashed_file_with_no_archive_backup(
-    db: Session,
-) -> None:
-    """The safety net this session added on top of "already trashed":
-    a file must also already be backed up by a completed archive before
-    it's eligible for real, unrecoverable deletion — trashed alone isn't
-    enough."""
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    trashed = _provision_file(db, connector_id=connector.id, name="trashed.pdf", provider_file_id="f-a")
-    FileRepository(db).mark_trashed(trashed, trashed=True)
-    service = ExecutionPlanService(db)
-
-    with pytest.raises(ValidationError):
-        service.create_permanent_delete_plan(
-            [trashed.id], organization_id=user.organization_id, user_id=user.id
-        )
-
-
-@requires_infra
-def test_create_permanent_delete_plan_rejects_a_file_whose_backing_archive_was_deleted(
-    db: Session,
-) -> None:
-    """Deleting the backup zip revokes the eligibility it granted — a
-    file's archive being `COMPLETED` in the past isn't enough, it has to
-    still be `COMPLETED` now."""
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    trashed = _provision_file(db, connector_id=connector.id, name="trashed.pdf", provider_file_id="f-a")
-    FileRepository(db).mark_trashed(trashed, trashed=True)
-    archive_job = _provision_completed_archive(
-        db, organization_id=user.organization_id, user_id=user.id, file_ids=[trashed.id]
-    )
-    ArchiveJobRepository(db).mark_deleted(archive_job)
-    service = ExecutionPlanService(db)
-
-    with pytest.raises(ValidationError):
-        service.create_permanent_delete_plan(
-            [trashed.id], organization_id=user.organization_id, user_id=user.id
         )
 
 
