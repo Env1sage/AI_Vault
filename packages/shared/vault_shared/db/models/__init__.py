@@ -1,7 +1,6 @@
 from vault_shared.db.models.ai_provider_config import AIProviderConfig
 from vault_shared.db.models.approval_decision import ApprovalDecision, ApprovalDecisionType
 from vault_shared.db.models.approval_request import ApprovalRequest, ApprovalStatus
-from vault_shared.db.models.archive_job import ArchiveJob, ArchiveJobStatus
 from vault_shared.db.models.audit_log import AuditLog
 from vault_shared.db.models.automation_template import AutomationTemplate
 from vault_shared.db.models.citation import Citation
@@ -120,8 +119,6 @@ __all__ = [
     "ApprovalDecisionType",
     "ApprovalRequest",
     "ApprovalStatus",
-    "ArchiveJob",
-    "ArchiveJobStatus",
     "AuditLog",
     "AutomationTemplate",
     "Citation",

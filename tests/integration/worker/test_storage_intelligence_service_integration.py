@@ -101,7 +101,6 @@ def _provision_file(
     modified_at: datetime | None = None,
     viewed_at: datetime | None = None,
     is_shared: bool = False,
-    owner_email: str = "founder@acme.com",
 ):
     source = StorageSourceRepository(db).upsert(
         connector_id=connector_id, provider_drive_id="root", name="My Drive", drive_type=DriveType.MY_DRIVE
@@ -116,7 +115,7 @@ def _provision_file(
         path=f"/{name}",
         mime_type=mime_type,
         size_bytes=size_bytes,
-        owner_email=owner_email,
+        owner_email="founder@acme.com",
         is_shared=is_shared,
         permissions_summary=None,
         version_id=None,
@@ -361,59 +360,6 @@ def test_storage_analysis_snapshot_totals_and_breakdowns(db: Session) -> None:
     assert snapshot.breakdown_by_type_bytes["Documents"] == 500_000
     assert snapshot.breakdown_by_size_bucket_bytes["> 5 GB"] == 6_000_000_000
     assert snapshot.large_file_count == 1  # the 6GB video only — 500KB doc is not "large"
-
-
-@requires_infra
-def test_files_shared_by_someone_else_are_excluded_from_storage_totals(db: Session) -> None:
-    """A file shared with the connected account by another owner doesn't
-    count against *this* account's real Drive quota (only owned files do),
-    and ExecutionService can never trash it (insufficientFilePermissions —
-    confirmed in production). Counting it toward "storage used" both
-    overstates the number and offers a cleanup action guaranteed to fail."""
-    user = _provision_user(db)
-    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
-    _provision_file(
-        db, connector_id=connector.id, name="mine.pdf", provider_file_id="f-owned",
-        size_bytes=500_000, owner_email="founder@acme.com",
-    )
-    _provision_file(
-        db, connector_id=connector.id, name="shared-with-me.zip", provider_file_id="f-shared",
-        size_bytes=50_000_000, owner_email="someone.else@gmail.com",
-    )
-    job = _create_job(db, organization_id=user.organization_id)
-
-    StorageIntelligenceService(db).run(job.id)
-
-    snapshot = StorageAnalysisSnapshotRepository(db).get_latest_for_organization(
-        user.organization_id
-    )
-    assert snapshot.total_files == 1
-    assert snapshot.total_size_bytes == 500_000
-
-
-@requires_infra
-def test_a_duplicate_where_only_one_copy_is_owned_is_not_flagged(db: Session) -> None:
-    """Same reasoning as the storage-total exclusion above: a "duplicate"
-    where the second copy belongs to someone else isn't something this
-    account can actually clean up, so it shouldn't be surfaced as one."""
-    user = _provision_user(db)
-    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
-    _provision_file(
-        db, connector_id=connector.id, name="report.pdf", provider_file_id="f-owned",
-        size_bytes=10_000_000, checksum="abc123", owner_email="founder@acme.com",
-    )
-    _provision_file(
-        db, connector_id=connector.id, name="report (shared copy).pdf", provider_file_id="f-shared",
-        size_bytes=10_000_000, checksum="abc123", owner_email="someone.else@gmail.com",
-    )
-    job = _create_job(db, organization_id=user.organization_id)
-
-    StorageIntelligenceService(db).run(job.id)
-
-    _, total = DuplicateGroupRepository(db).list_for_organization(
-        user.organization_id, limit=10, offset=0
-    )
-    assert total == 0
 
 
 @requires_infra

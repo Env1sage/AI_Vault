@@ -399,94 +399,7 @@ def test_create_ad_hoc_plan_targets_exactly_the_selected_files(db: Session) -> N
 
 
 @requires_infra
-def test_create_ad_hoc_plan_accepts_create_archive(db: Session) -> None:
-    """The Archive MVP's "Create Archive" bulk action reuses this exact
-    entry point with action_type="create_archive" — this is the only
-    change required upstream of ExecutionService to unblock it
-    (_AD_HOC_ALLOWED_ACTIONS)."""
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file_a = _provision_file(db, connector_id=connector.id, name="a.pdf", provider_file_id="f-a")
-
-    service = ExecutionPlanService(db)
-    plan = service.create_ad_hoc_plan(
-        [file_a.id],
-        action_type=ExecutionActionType.CREATE_ARCHIVE,
-        organization_id=user.organization_id,
-        user_id=user.id,
-    )
-
-    detail = service.get_detail(plan.id, organization_id=user.organization_id)
-    assert len(detail.steps) == 1
-    assert detail.steps[0].action_type == ExecutionActionType.CREATE_ARCHIVE
-    assert detail.steps[0].target_file_id == file_a.id
-
-
-@requires_infra
-def test_create_ad_hoc_plan_rejects_an_unsupported_action(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file_a = _provision_file(db, connector_id=connector.id, name="a.pdf", provider_file_id="f-a")
-    service = ExecutionPlanService(db)
-
-    with pytest.raises(ValidationError):
-        service.create_ad_hoc_plan(
-            [file_a.id],
-            action_type=ExecutionActionType.UPDATE_METADATA,
-            organization_id=user.organization_id,
-            user_id=user.id,
-        )
-
-
-@requires_infra
-def test_create_ad_hoc_plan_rename_targets_one_file_with_the_new_name(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file_a = _provision_file(db, connector_id=connector.id, name="old.pdf", provider_file_id="f-a")
-    service = ExecutionPlanService(db)
-
-    plan = service.create_ad_hoc_plan(
-        [file_a.id],
-        action_type=ExecutionActionType.RENAME,
-        organization_id=user.organization_id,
-        user_id=user.id,
-        new_name="new.pdf",
-    )
-
-    detail = service.get_detail(plan.id, organization_id=user.organization_id)
-    assert len(detail.steps) == 1
-    assert detail.steps[0].target_file_id == file_a.id
-    assert detail.steps[0].planned_change["new_name"] == "new.pdf"
-
-
-@requires_infra
-def test_create_ad_hoc_plan_rename_rejects_more_than_one_file(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file_a = _provision_file(db, connector_id=connector.id, name="a.pdf", provider_file_id="f-a")
-    file_b = _provision_file(db, connector_id=connector.id, name="b.pdf", provider_file_id="f-b")
-    service = ExecutionPlanService(db)
-
-    with pytest.raises(ValidationError):
-        service.create_ad_hoc_plan(
-            [file_a.id, file_b.id],
-            action_type=ExecutionActionType.RENAME,
-            organization_id=user.organization_id,
-            user_id=user.id,
-            new_name="new.pdf",
-        )
-
-
-@requires_infra
-def test_create_ad_hoc_plan_rename_rejects_a_missing_new_name(db: Session) -> None:
+def test_create_ad_hoc_plan_rejects_a_non_archive_action(db: Session) -> None:
     user = _provision_user(db)
     connector = _provision_connector(
         db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
@@ -498,49 +411,6 @@ def test_create_ad_hoc_plan_rename_rejects_a_missing_new_name(db: Session) -> No
         service.create_ad_hoc_plan(
             [file_a.id],
             action_type=ExecutionActionType.RENAME,
-            organization_id=user.organization_id,
-            user_id=user.id,
-        )
-
-
-@requires_infra
-def test_create_ad_hoc_plan_move_targets_every_selected_file_at_the_new_parent(
-    db: Session,
-) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file_a = _provision_file(db, connector_id=connector.id, name="a.pdf", provider_file_id="f-a")
-    file_b = _provision_file(db, connector_id=connector.id, name="b.pdf", provider_file_id="f-b")
-    service = ExecutionPlanService(db)
-
-    plan = service.create_ad_hoc_plan(
-        [file_a.id, file_b.id],
-        action_type=ExecutionActionType.MOVE_FILE,
-        organization_id=user.organization_id,
-        user_id=user.id,
-        new_parent_id="folder-target",
-    )
-
-    detail = service.get_detail(plan.id, organization_id=user.organization_id)
-    assert len(detail.steps) == 2
-    assert all(s.planned_change["new_parent_id"] == "folder-target" for s in detail.steps)
-
-
-@requires_infra
-def test_create_ad_hoc_plan_move_rejects_a_missing_destination(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file_a = _provision_file(db, connector_id=connector.id, name="a.pdf", provider_file_id="f-a")
-    service = ExecutionPlanService(db)
-
-    with pytest.raises(ValidationError):
-        service.create_ad_hoc_plan(
-            [file_a.id],
-            action_type=ExecutionActionType.MOVE_FILE,
             organization_id=user.organization_id,
             user_id=user.id,
         )
@@ -648,49 +518,6 @@ def test_decide_approve_creates_an_execution_job_when_permissions_are_satisfied(
     assert len(jobs) == 1
     assert jobs[0].status == ExecutionJobStatus.PENDING
     assert jobs[0].triggered_by_user_id == user.id
-
-
-@requires_infra
-def test_auto_decide_as_creator_approves_and_creates_a_job(db: Session) -> None:
-    """Instant-execution mode's own path — same effect as a human's
-    `decide(approve)`, just invoked automatically by the creator's own
-    request instead of a separate click."""
-    user = _provision_user(db)
-    plan, _approval = _provision_plan_with_approval(db, user=user, granted_scopes=DRIVE_WRITE_SCOPE)
-    service = ApprovalService(db)
-
-    decided = service.auto_decide_as_creator(
-        plan.id, organization_id=user.organization_id, user_id=user.id
-    )
-
-    assert decided.status == ApprovalStatus.APPROVED
-    updated_plan = ExecutionPlanRepository(db).get_by_id(plan.id)
-    assert updated_plan.status == ExecutionPlanStatus.APPROVED
-
-    jobs = ExecutionJobRepository(db).list_for_plan(plan.id)
-    assert len(jobs) == 1
-    assert jobs[0].triggered_by_user_id == user.id
-
-
-@requires_infra
-def test_auto_decide_as_creator_raises_when_permissions_are_not_satisfied(db: Session) -> None:
-    """The connector lacks write scope — auto-approval must fail loudly
-    (not silently no-op) so the caller (the execution-plans router) can
-    leave the plan PENDING_APPROVAL for a human to retry later."""
-    user = _provision_user(db)
-    plan, _approval = _provision_plan_with_approval(
-        db, user=user, granted_scopes="https://www.googleapis.com/auth/drive.readonly"
-    )
-    service = ApprovalService(db)
-
-    with pytest.raises(ValidationError):
-        service.auto_decide_as_creator(
-            plan.id, organization_id=user.organization_id, user_id=user.id
-        )
-
-    untouched_plan = ExecutionPlanRepository(db).get_by_id(plan.id)
-    assert untouched_plan.status == ExecutionPlanStatus.PENDING_APPROVAL
-    assert ExecutionJobRepository(db).list_for_plan(plan.id) == []
 
 
 @requires_infra

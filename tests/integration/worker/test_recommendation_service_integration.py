@@ -208,33 +208,6 @@ def test_recommendation_run_persists_a_dashboard_snapshot(db: Session) -> None:
 
 
 @requires_infra
-def test_dashboard_snapshot_totals_exclude_files_owned_by_someone_else(db: Session) -> None:
-    """A file shared with the connected account by another owner never
-    counted against this account's real Drive quota, and can't be trashed
-    (insufficientFilePermissions) — so it shouldn't count toward the
-    Dashboard's total_files/total_storage_bytes either. The ownership rules
-    themselves (OrphanedOwnershipRule etc., tested separately in
-    test_recommendation_rules.py) still need to see it, which is why this
-    exclusion lives only in the snapshot totals, not the underlying query."""
-    user = _provision_user(db)
-    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
-    for i in range(6):
-        _provision_file(db, connector_id=connector.id, name=f"F{i}.txt", provider_file_id=f"f-{i}")
-    _provision_file(
-        db, connector_id=connector.id, name="shared-with-me.zip", provider_file_id="f-shared",
-        size_bytes=50_000_000, owner_email="someone.else@gmail.com",
-    )
-    job = _create_job(db, organization_id=user.organization_id)
-
-    RecommendationService(db).run(job.id)
-
-    snapshot = DashboardSnapshotRepository(db).get_latest_for_organization(user.organization_id)
-    assert snapshot.total_files == 6
-    assert snapshot.total_storage_bytes == 6 * 1024
-    assert snapshot.classified_files + snapshot.unclassified_files == snapshot.total_files
-
-
-@requires_infra
 def test_a_second_run_resolves_a_recommendation_whose_condition_no_longer_holds(db: Session) -> None:
     user = _provision_user(db)
     connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)

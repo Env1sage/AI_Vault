@@ -6,8 +6,7 @@ export type ExecutionActionType =
   | "rename"
   | "archive"
   | "remove_duplicate"
-  | "update_metadata"
-  | "create_archive";
+  | "update_metadata";
 
 export type ExecutionStepStatus = "pending" | "completed" | "failed" | "skipped" | "rolled_back";
 
@@ -56,18 +55,13 @@ export interface ExecutionPlanDetail extends ExecutionPlan {
 }
 
 /** Exactly one origin must be set: `recommendation_id`, `duplicate_group_id`,
- * or `file_ids` (paired with `action_type`) for an ad-hoc plan built from a
- * Storage Intelligence file listing, the AI response/file-explorer's
- * multi-select, or the Files browser's rename/move actions. `new_name` is
- * required (and `file_ids` must be exactly one id) when `action_type` is
- * "rename"; `new_parent_id` is required when it's "move_file". */
+ * or `file_ids` (paired with `action_type`, currently "archive" only) for an
+ * ad-hoc plan built from a Storage Intelligence file listing. */
 export interface CreateExecutionPlanRequest {
   recommendation_id?: string;
   duplicate_group_id?: string;
   file_ids?: string[];
   action_type?: ExecutionActionType;
-  new_name?: string;
-  new_parent_id?: string;
 }
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "changes_requested" | "expired";

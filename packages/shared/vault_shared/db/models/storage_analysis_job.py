@@ -25,15 +25,10 @@ class StorageAnalysisTrigger(enum.StrEnum):
     capped field — Phase 5's relationship-discovery concern, not this
     layer's), so it has no real dependency on enrichment/embedding/
     recommendation and shouldn't wait behind them. `MANUAL`: an explicit
-    "re-analyze storage" request from the dashboard. `EXECUTION_COMPLETED`:
-    auto-enqueued when an `ExecutionJob` finishes at least one
-    ARCHIVE/REMOVE_DUPLICATE trash (or its rollback) — otherwise a trashed
-    file's `size_bytes` would keep counting toward every total until the
-    next scan or manual re-analysis."""
+    "re-analyze storage" request from the dashboard."""
 
     SCAN_COMPLETED = "scan_completed"
     MANUAL = "manual"
-    EXECUTION_COMPLETED = "execution_completed"
 
 
 class StorageAnalysisJob(Base):

@@ -5,12 +5,6 @@ export type {
   AIProviderConfigUpdateRequest,
 } from "./ai-provider";
 export type {
-  ArchiveJob,
-  ArchiveJobDetail,
-  ArchiveJobStatus,
-  ArchiveManifestEntry,
-} from "./archives";
-export type {
   AuthSession,
   GoogleLoginRequest,
   Organization,
@@ -73,7 +67,6 @@ export type {
   FileListResponse,
   FileMetadata,
   FileSummary,
-  FolderSummary,
   KnowledgeAttribute,
   RelatedFile,
   RelationshipType,

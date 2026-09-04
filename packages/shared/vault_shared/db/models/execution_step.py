@@ -22,11 +22,6 @@ class ExecutionActionType(enum.StrEnum):
     ARCHIVE = "archive"
     REMOVE_DUPLICATE = "remove_duplicate"
     UPDATE_METADATA = "update_metadata"
-    # Archive MVP — unlike every action above, this doesn't mutate Drive at
-    # all (files are only read/downloaded); N steps in one plan are
-    # completed together by one batch operation in ExecutionService rather
-    # than independently, see _execute_archive_batch.
-    CREATE_ARCHIVE = "create_archive"
 
 
 class ExecutionStepStatus(enum.StrEnum):

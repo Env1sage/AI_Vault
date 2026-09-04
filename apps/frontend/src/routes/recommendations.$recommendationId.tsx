@@ -52,10 +52,10 @@ function RecommendationDetailPage() {
       }),
     onSuccess: (plan) => {
       void queryClient.invalidateQueries({ queryKey: ["execution-plans"] });
-      toast.success("Executing now", {
-        description: "This action runs immediately — no approval step required.",
+      toast.success("Execution plan created", {
+        description: "Nothing runs until it's approved.",
         action: {
-          label: "View progress",
+          label: "Review plan",
           onClick: () => {
             window.location.href = `/execution-plans/${plan.id}`;
           },
@@ -141,8 +141,9 @@ function RecommendationDetailPage() {
                 <CardContent className="flex flex-col gap-3">
                   <p className="text-sm">{recommendation.suggested_action}</p>
                   <p className="rounded-lg bg-secondary p-2.5 text-xs text-muted-foreground">
-                    Creating an execution plan runs it immediately — no approval step required. A
-                    plan only stays pending if something blocked it, reviewable from the{" "}
+                    This platform never touches Google Drive automatically. An execution plan is
+                    just a reviewable proposal — nothing runs until an owner or admin approves it
+                    in the{" "}
                     <Link to="/approvals" className="text-primary hover:underline">
                       Approval Queue
                     </Link>

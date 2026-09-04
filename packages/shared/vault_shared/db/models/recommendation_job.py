@@ -20,16 +20,10 @@ class RecommendationTrigger(enum.StrEnum):
     """`EMBEDDING_COMPLETED`: auto-enqueued when an `EmbeddingJob` finishes
     (Phase 7's Architecture Impact: AI Intelligence Engine → Recommendation
     Engine) — the normal, steady-state path. `MANUAL`: an explicit
-    "refresh recommendations" request from the dashboard.
-    `EXECUTION_COMPLETED`: auto-enqueued when an `ExecutionJob` finishes at
-    least one ARCHIVE/REMOVE_DUPLICATE trash (or its rollback) — the
-    Dashboard's `total_storage_bytes` is written only here (see
-    `RecommendationService._generate`), so without this trigger it would
-    stay stale until the next embedding cycle."""
+    "refresh recommendations" request from the dashboard."""
 
     EMBEDDING_COMPLETED = "embedding_completed"
     MANUAL = "manual"
-    EXECUTION_COMPLETED = "execution_completed"
 
 
 class RecommendationJob(Base):

@@ -2,7 +2,6 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query
 
-from app.application.approval_service import ApprovalService
 from app.application.execution_job_service import ExecutionJobService
 from app.application.execution_plan_service import ExecutionPlanService
 from app.presentation.api.v1.schemas import (
@@ -14,14 +13,11 @@ from app.presentation.api.v1.schemas import (
 from app.presentation.dependencies.auth import get_current_user, require_role
 from app.presentation.dependencies.rate_limit import rate_limiter
 from app.presentation.dependencies.services import (
-    get_approval_service,
     get_execution_job_service,
     get_execution_plan_service,
 )
-from vault_shared import ValidationError, VaultError, get_logger
+from vault_shared import ValidationError
 from vault_shared.db.models import RoleName, User
-
-logger = get_logger("app.presentation.api.v1.execution_plans")
 
 execution_plans_router = APIRouter(tags=["execution-plans"])
 
@@ -39,7 +35,6 @@ def create_execution_plan(
     request: CreateExecutionPlanRequest,
     user: User = Depends(_require_owner_or_admin),
     service: ExecutionPlanService = Depends(get_execution_plan_service),
-    approvals: ApprovalService = Depends(get_approval_service),
 ) -> ExecutionPlanResponse:
     has_recommendation = request.recommendation_id is not None
     has_duplicate_group = request.duplicate_group_id is not None
@@ -70,29 +65,7 @@ def create_execution_plan(
             action_type=request.action_type,
             organization_id=user.organization_id,
             user_id=user.id,
-            new_name=request.new_name,
-            new_parent_id=request.new_parent_id,
         )
-
-    # Instant execution mode: every plan is auto-approved by its own
-    # creator right away — no human review wait. A failure here (e.g. the
-    # connector still lacks write scope) is logged and swallowed rather
-    # than failing plan creation itself: the plan already exists and stays
-    # PENDING_APPROVAL, reviewable/retryable from the unchanged Approvals
-    # page once the underlying problem is fixed.
-    try:
-        approvals.auto_decide_as_creator(
-            plan.id, organization_id=user.organization_id, user_id=user.id
-        )
-    except VaultError as exc:
-        logger.warning(
-            "auto_approval_failed", extra={"execution_plan_id": str(plan.id), "error": str(exc)}
-        )
-    # `service` and `approvals` share one request-scoped Session (both
-    # depend on get_db), so `decide()`'s internal commit expires `plan`'s
-    # attributes in place — the next read below transparently reloads its
-    # now-current status ("approved"/"executing"), no separate re-fetch
-    # needed on the success path.
     return ExecutionPlanResponse.from_model(plan)
 
 

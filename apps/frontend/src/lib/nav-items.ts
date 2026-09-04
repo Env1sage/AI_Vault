@@ -1,5 +1,5 @@
 import {
-  Archive,
+  Bell,
   BrainCircuit,
   Building2,
   ClipboardCheck,
@@ -9,11 +9,14 @@ import {
   HardDrive,
   Layers,
   LayoutDashboard,
+  LayoutTemplate,
   Lightbulb,
   MessageCircle,
   PlayCircle,
   ScanLine,
   Search,
+  Workflow,
+  Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -44,6 +47,15 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Automation",
+    items: [
+      { label: "Workflows", to: "/workflows", icon: Workflow },
+      { label: "Automation", to: "/automation", icon: Zap },
+      { label: "Templates", to: "/automation-templates", icon: LayoutTemplate },
+      { label: "Notifications", to: "/notifications", icon: Bell },
+    ],
+  },
+  {
     label: "Execution",
     items: [
       { label: "Execution Plans", to: "/execution-plans", icon: ClipboardList },
@@ -56,7 +68,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Connections", to: "/storage-connections", icon: Cloud },
       { label: "Scans", to: "/scans", icon: ScanLine },
       { label: "Storage Intelligence", to: "/storage-intelligence", icon: HardDrive },
-      { label: "Archives", to: "/archives", icon: Archive },
     ],
   },
   {

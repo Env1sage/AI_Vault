@@ -15,7 +15,7 @@ logger = get_logger("vault_shared.connectors.google_drive")
 
 DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
 _REQUEST_TIMEOUT_SECONDS = 30
-GOOGLE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 # Drive enforces no real limit on a file's `name` — some files (notably ones
 # with no explicit title, where Drive falls back to a content excerpt) can
 # return names far longer than any reasonable filename, which would
@@ -372,7 +372,7 @@ class GoogleDriveClient:
             shared=bool(item.get("shared", False)),
             checksum=item.get("md5Checksum"),
             version_id=item.get("headRevisionId"),
-            is_folder=item.get("mimeType") == GOOGLE_FOLDER_MIME_TYPE,
+            is_folder=item.get("mimeType") == _FOLDER_MIME_TYPE,
             trashed=bool(item.get("trashed", False)),
             web_view_link=item.get("webViewLink"),
         )

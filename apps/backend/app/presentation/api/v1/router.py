@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 
 from app.presentation.api.v1.approvals import approvals_router
-from app.presentation.api.v1.archives import archives_router
 from app.presentation.api.v1.auth import auth_router
 from app.presentation.api.v1.automation_templates import automation_templates_router
 from app.presentation.api.v1.connectors import connectors_router
@@ -49,4 +48,3 @@ v1_router.include_router(workflow_policies_router)
 v1_router.include_router(notifications_router)
 v1_router.include_router(automation_templates_router)
 v1_router.include_router(storage_router)
-v1_router.include_router(archives_router)

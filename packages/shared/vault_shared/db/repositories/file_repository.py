@@ -4,7 +4,6 @@ from datetime import datetime
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Query, Session
 
-from vault_shared.connectors.google_drive import GOOGLE_FOLDER_MIME_TYPE
 from vault_shared.db.models import (
     Embedding,
     ExtractionStatus,
@@ -41,22 +40,6 @@ class FileRepository:
             .filter(File.id == file_id, StorageConnector.organization_id == organization_id)
             .first()
         )
-
-    def get_owned_with_connector(
-        self, file_id: uuid.UUID, *, organization_id: uuid.UUID
-    ) -> tuple[File, StorageConnector] | None:
-        """Same ownership join as `get_owned_by_organization`, but also
-        returns the file's own connector — for direct, read-only Drive
-        operations (e.g. download) that need a live access token without
-        going through the Execution Engine (nothing is mutated)."""
-        row = (
-            self._session.query(File, StorageConnector)
-            .join(StorageSource, File.storage_source_id == StorageSource.id)
-            .join(StorageConnector, StorageSource.connector_id == StorageConnector.id)
-            .filter(File.id == file_id, StorageConnector.organization_id == organization_id)
-            .first()
-        )
-        return row
 
     def list_by_ids(self, file_ids: list[uuid.UUID]) -> list[File]:
         if not file_ids:
@@ -115,11 +98,6 @@ class FileRepository:
 
         file.provider_parent_id = provider_parent_id
         file.parent_folder_id = parent_folder_id
-        # Every caller of upsert() sources from a `trashed = false` Drive
-        # listing (see GoogleDriveClient.list_files_page) — if we're
-        # upserting it, it isn't trashed, even if a past ExecutionService
-        # trash action (later undone outside this platform) had marked it so.
-        file.trashed = False
         file.name = name
         file.path = path
         file.mime_type = mime_type
@@ -136,15 +114,6 @@ class FileRepository:
         file.scanned_at = scanned_at
         self._session.flush()
         return file
-
-    def mark_trashed(self, file: File, *, trashed: bool) -> None:
-        """Called by `ExecutionService` right after a successful (or rolled
-        back) ARCHIVE/REMOVE_DUPLICATE trash — the local mirror's only
-        acknowledgment that the file left active storage, since the row
-        itself is deliberately never deleted here (see `File.trashed`'s
-        docstring)."""
-        file.trashed = trashed
-        self._session.flush()
 
     def count_for_source(self, storage_source_id: uuid.UUID) -> int:
         return self._session.query(File).filter_by(storage_source_id=storage_source_id).count()
@@ -169,62 +138,26 @@ class FileRepository:
         folder paths are known."""
         return self._session.query(File).filter_by(storage_source_id=storage_source_id).all()
 
-    def _for_connector(self, connector_id: uuid.UUID, *, ownership: str | None = None) -> Query[File]:
-        """`ownership` backs the Files browser's "All / My files / Shared
-        with me" filter — `None` (the default, every other caller) keeps
-        the unfiltered behavior every existing caller relies on.
-        `"mine"`/`"shared"` compare `File.owner_email` against the
-        connector's own `account_email`, same signal already used to keep
-        shared-with-me files out of Storage Intelligence's totals
-        (`_for_organization`) — here it's a user-chosen view, not an
-        always-on exclusion, since Files is meant to be a complete browse
-        surface."""
-        query = (
+    def _for_connector(self, connector_id: uuid.UUID) -> Query[File]:
+        return (
             self._session.query(File)
             .join(StorageSource, File.storage_source_id == StorageSource.id)
             .filter(StorageSource.connector_id == connector_id)
         )
-        if ownership is not None:
-            query = query.join(StorageConnector, StorageSource.connector_id == StorageConnector.id)
-            if ownership == "mine":
-                query = query.filter(File.owner_email == StorageConnector.account_email)
-            elif ownership == "shared":
-                query = query.filter(File.owner_email != StorageConnector.account_email)
-        return query
 
     def list_for_connector(
-        self, connector_id: uuid.UUID, *, limit: int, offset: int, ownership: str | None = None
+        self, connector_id: uuid.UUID, *, limit: int, offset: int
     ) -> list[File]:
         return (
-            self._for_connector(connector_id, ownership=ownership)
+            self._for_connector(connector_id)
             .order_by(File.name)
             .limit(limit)
             .offset(offset)
             .all()
         )
 
-    def count_for_connector(self, connector_id: uuid.UUID, *, ownership: str | None = None) -> int:
-        return self._for_connector(connector_id, ownership=ownership).count()
-
-    def search_folders_for_connector(
-        self, connector_id: uuid.UUID, *, query: str, limit: int
-    ) -> list[File]:
-        """Backs the Files browser's "Move to folder" picker — deliberately
-        not a full folder-tree browse (out of scope for this round, see the
-        Files browser's flat listing), just a name search restricted to
-        folder-mime-type rows so the destination `provider_file_id` for a
-        `MOVE_FILE` step can be picked without one. Excludes trashed
-        folders — nothing should be moved into Drive's Trash this way."""
-        pattern = f"%{query.strip()}%"
-        return (
-            self._for_connector(connector_id)
-            .filter(File.mime_type == GOOGLE_FOLDER_MIME_TYPE)
-            .filter(File.trashed.is_(False))
-            .filter(File.name.ilike(pattern))
-            .order_by(File.name)
-            .limit(limit)
-            .all()
-        )
+    def count_for_connector(self, connector_id: uuid.UUID) -> int:
+        return self._for_connector(connector_id).count()
 
     def list_all_for_connector(self, connector_id: uuid.UUID) -> list[File]:
         """Unpaginated — used only by `RelationshipDiscoveryService`, which
@@ -372,44 +305,30 @@ class FileRepository:
 
     def list_for_organization_with_details(
         self, organization_id: uuid.UUID
-    ) -> list[tuple[File, FileMetadata | None, FileClassification | None, str | None, str | None]]:
+    ) -> list[tuple[File, FileMetadata | None, FileClassification | None, str | None]]:
         """The Recommendation Engine's primary data pull (Handbook's
         Recommendation Engine, Phase 7) — every file across *all* of an
         organization's connectors in one query, left-joined with its
         metadata/classification (most rules need several of these fields
-        at once), its connector's `workspace_domain` (the orphaned-
-        ownership rule's "is this file's owner outside the org" check —
-        that rule, and `OwnershipConcentrationRule`, deliberately need
-        every file regardless of who owns it, so this query stays
-        unfiltered by ownership unlike `_for_organization`), and its
-        connector's `account_email` (not for any rule — `RecommendationService.
-        _generate` uses it to compute the Dashboard's `total_storage_bytes`/
-        `total_files` from only the *owned* subset of these same rows, same
-        reasoning as `_for_organization`'s ownership filter: a file shared
-        by someone else doesn't count toward this account's real storage).
+        at once) and its connector's `workspace_domain` (the orphaned-
+        ownership rule's "is this file's owner outside the org" check).
         Brute-force by design, same acceptance as `EmbeddingRepository.
         list_for_organization` (ADR-018) — fine at reference scale, a
         streaming/paginated version is a future-scale concern."""
         rows = (
             self._session.query(
-                File,
-                FileMetadata,
-                FileClassification,
-                StorageConnector.workspace_domain,
-                StorageConnector.account_email,
+                File, FileMetadata, FileClassification, StorageConnector.workspace_domain
             )
             .join(StorageSource, File.storage_source_id == StorageSource.id)
             .join(StorageConnector, StorageSource.connector_id == StorageConnector.id)
             .outerjoin(FileMetadata, FileMetadata.file_id == File.id)
             .outerjoin(FileClassification, FileClassification.file_id == File.id)
-            .filter(
-                StorageConnector.organization_id == organization_id, File.trashed.is_(False)
-            )
+            .filter(StorageConnector.organization_id == organization_id)
             .all()
         )
         return [
-            (file, metadata, classification, domain, account_email)
-            for file, metadata, classification, domain, account_email in rows
+            (file, metadata, classification, domain)
+            for file, metadata, classification, domain in rows
         ]
 
     # ------------------------------------------------------------------
@@ -417,31 +336,11 @@ class FileRepository:
     # ------------------------------------------------------------------
 
     def _for_organization(self, organization_id: uuid.UUID) -> Query[File]:
-        """Every Storage Intelligence listing (overview totals, large/old/
-        inactive/temporary-candidate/duplicate-group queries) builds on
-        this one base. Two exclusions here fix all of them at once, not
-        just the top-level total:
-
-        - `File.trashed.is_(False)` — already-trashed rows (see that
-          column's docstring).
-        - `File.owner_email == StorageConnector.account_email` — a file
-          shared with the connected account by someone else doesn't count
-          against *this* account's real Drive storage quota (only owned
-          files do — Google's own quota page never counts it), and
-          `ExecutionService.set_trashed` will always fail on it
-          (`insufficientFilePermissions`, confirmed in practice) since the
-          connected account has no write access to someone else's file.
-          Counting it toward "storage used" and offering an Archive button
-          that can never succeed are both wrong for the same reason."""
         return (
             self._session.query(File)
             .join(StorageSource, File.storage_source_id == StorageSource.id)
             .join(StorageConnector, StorageSource.connector_id == StorageConnector.id)
-            .filter(
-                StorageConnector.organization_id == organization_id,
-                File.trashed.is_(False),
-                File.owner_email == StorageConnector.account_email,
-            )
+            .filter(StorageConnector.organization_id == organization_id)
         )
 
     def list_all_for_organization(self, organization_id: uuid.UUID) -> list[File]:
@@ -474,8 +373,6 @@ class FileRepository:
             .filter(
                 StorageConnector.organization_id == organization_id,
                 File.checksum.isnot(None),
-                File.trashed.is_(False),
-                File.owner_email == StorageConnector.account_email,
             )
             .group_by(File.checksum)
             .having(func.count(File.id) > 1)

@@ -155,8 +155,6 @@ export function actionTypeLabel(actionType: string): string {
       return "Remove duplicate (Drive trash)";
     case "update_metadata":
       return "Update metadata";
-    case "create_archive":
-      return "Create archive";
     default:
       return actionType;
   }

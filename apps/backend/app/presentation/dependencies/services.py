@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 
 from app.application.ai_provider_config_service import AIProviderConfigService
 from app.application.approval_service import ApprovalService
-from app.application.archive_service import ArchiveService
 from app.application.auth_service import AuthService
 from app.application.automation_template_service import AutomationTemplateService
 from app.application.connector_service import ConnectorService
@@ -65,11 +64,8 @@ def get_intelligence_job_service(db: Session = Depends(get_db)) -> IntelligenceJ
     return IntelligenceJobService(db)
 
 
-def get_file_service(
-    db: Session = Depends(get_db),
-    oauth_client: GoogleWorkspaceOAuthClient = Depends(get_google_workspace_oauth_client),
-) -> FileService:
-    return FileService(db, oauth_client=oauth_client)
+def get_file_service(db: Session = Depends(get_db)) -> FileService:
+    return FileService(db)
 
 
 def get_embedding_job_service(db: Session = Depends(get_db)) -> EmbeddingJobService:
@@ -108,10 +104,6 @@ def get_storage_intelligence_service(
 
 def get_execution_plan_service(db: Session = Depends(get_db)) -> ExecutionPlanService:
     return ExecutionPlanService(db)
-
-
-def get_archive_service(db: Session = Depends(get_db)) -> ArchiveService:
-    return ArchiveService(db)
 
 
 def get_approval_service(db: Session = Depends(get_db)) -> ApprovalService:

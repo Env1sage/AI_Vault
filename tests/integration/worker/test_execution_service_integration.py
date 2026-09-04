@@ -10,7 +10,6 @@ from vault_shared import NotFoundError, get_settings
 from vault_shared.connectors.google_drive import DriveFile
 from vault_shared.connectors.google_workspace import GoogleAccountInfo, GoogleTokenSet
 from vault_shared.db.models import (
-    ArchiveJobStatus,
     ConnectorProvider,
     DriveType,
     ExecutionActionType,
@@ -18,13 +17,10 @@ from vault_shared.db.models import (
     ExecutionPlanStatus,
     ExecutionResultStatus,
     ExecutionStepStatus,
-    RecommendationTrigger,
     RoleName,
-    StorageAnalysisTrigger,
     VerificationStatus,
 )
 from vault_shared.db.repositories import (
-    ArchiveJobRepository,
     ConnectorCredentialsRepository,
     ExecutionJobRepository,
     ExecutionPlanRepository,
@@ -36,7 +32,6 @@ from vault_shared.db.repositories import (
     RecommendationRepository,
     RoleRepository,
     RollbackRecordRepository,
-    StorageAnalysisJobRepository,
     StorageConnectorRepository,
     StorageSourceRepository,
     UserRepository,
@@ -114,12 +109,10 @@ class _FakeGoogleDriveClient:
         self.calls: list[tuple[str, str]] = []
 
     def download_file(self, *, access_token: str, file_id: str) -> bytes:
-        self.calls.append(("download_file", file_id))
-        return f"contents of {file_id}".encode()
+        raise NotImplementedError
 
     def export_file(self, *, access_token: str, file_id: str, export_mime_type: str) -> bytes:
-        self.calls.append(("export_file", file_id))
-        return f"exported {file_id} as {export_mime_type}".encode()
+        raise NotImplementedError
 
     def list_shared_drives(self, *, access_token: str) -> list:
         return []
@@ -158,35 +151,6 @@ class _FakeGoogleDriveClient:
     ) -> DriveFile:
         self.calls.append(("update_app_properties", file_id))
         return self._files[file_id]
-
-
-class _FakeObjectStorageClient:
-    """In-memory stand-in — the Phase 8 fakes/mocks-only rule (ADR-020)
-    extends naturally to the Archive MVP's object store: no test may hit a
-    real MinIO/S3 bucket."""
-
-    def __init__(self) -> None:
-        self._objects: dict[str, bytes] = {}
-        self.put_calls: list[str] = []
-        self.delete_calls: list[str] = []
-
-    def put_object(self, *, key: str, body, content_type: str) -> None:
-        self.put_calls.append(key)
-        self._objects[key] = body.read()
-        # Mirrors boto3's upload_fileobj, which closes the passed file
-        # object once the transfer completes — a real bug (reading
-        # compressed_size via buffer.tell() *after* this call) shipped
-        # once because this fake didn't replicate that and silently let
-        # every test pass against a client that behaves differently from
-        # the real one.
-        body.close()
-
-    def get_object_stream(self, *, key: str):
-        yield self._objects[key]
-
-    def delete_object(self, *, key: str) -> None:
-        self.delete_calls.append(key)
-        self._objects.pop(key, None)
 
 
 def _drive_file(
@@ -312,30 +276,6 @@ def _provision_plan(db: Session, *, organization_id: uuid.UUID, user_id: uuid.UU
     return plan
 
 
-def _provision_ad_hoc_plan(db: Session, *, organization_id: uuid.UUID, user_id: uuid.UUID):
-    """Unlike `_provision_plan`, creates no `RecommendationJob` — that
-    fixture's own job is left PENDING forever (never marked complete),
-    which would make `RecommendationJobRepository.has_active_job` see an
-    "active" job for the org and correctly (by design) skip creating a
-    new one. Used by tests asserting on `_trigger_storage_refresh`'s own
-    job-creation behavior, where that dangling fixture job would be a
-    false blocker rather than anything real."""
-    plan = ExecutionPlanRepository(db).create(
-        organization_id=organization_id,
-        recommendation_id=None,
-        duplicate_group_id=None,
-        created_by_user_id=user_id,
-        target_provider="google_workspace",
-        estimated_impact="1 file",
-        estimated_storage_savings_bytes=100,
-        risk_level="low",
-        rollback_available=True,
-        required_permissions=[DRIVE_WRITE_SCOPE],
-    )
-    db.commit()
-    return plan
-
-
 def _provision_step(db: Session, *, plan_id: uuid.UUID, file_id: uuid.UUID, action_type: str, order: int = 0):
     step = ExecutionStepRepository(db).create(
         execution_plan_id=plan_id,
@@ -376,12 +316,7 @@ def test_forward_execution_trashes_the_file_and_completes_job_and_plan(db: Sessi
     job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
 
     drive = _FakeGoogleDriveClient(files={"f-dup": _drive_file(file_id="f-dup", trashed=False)})
-    service = ExecutionService(
-        db,
-        drive_client=drive,
-        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
-        object_storage_client=_FakeObjectStorageClient(),
-    )
+    service = ExecutionService(db, drive_client=drive, oauth_client=_FakeGoogleWorkspaceOAuthClient())
 
     service.run(job.id)
 
@@ -423,12 +358,7 @@ def test_rollback_restores_the_file_and_marks_plan_rolled_back(db: Session) -> N
     forward_job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
 
     drive = _FakeGoogleDriveClient(files={"f-dup": _drive_file(file_id="f-dup", trashed=False)})
-    service = ExecutionService(
-        db,
-        drive_client=drive,
-        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
-        object_storage_client=_FakeObjectStorageClient(),
-    )
+    service = ExecutionService(db, drive_client=drive, oauth_client=_FakeGoogleWorkspaceOAuthClient())
     service.run(forward_job.id)
     assert drive._files["f-dup"].trashed is True
 
@@ -477,12 +407,7 @@ def test_a_single_steps_failure_does_not_stop_the_job(db: Session) -> None:
     # the plan was created), which is exactly what the live "resource
     # existence" check right before mutation is supposed to catch.
     drive = _FakeGoogleDriveClient(files={"f-good": _drive_file(file_id="f-good", trashed=False)})
-    service = ExecutionService(
-        db,
-        drive_client=drive,
-        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
-        object_storage_client=_FakeObjectStorageClient(),
-    )
+    service = ExecutionService(db, drive_client=drive, oauth_client=_FakeGoogleWorkspaceOAuthClient())
 
     service.run(job.id)
 
@@ -519,12 +444,7 @@ def test_execution_is_blocked_and_no_drive_call_is_made_when_the_connector_lacks
     job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
 
     drive = _FakeGoogleDriveClient(files={"f-dup": _drive_file(file_id="f-dup", trashed=False)})
-    service = ExecutionService(
-        db,
-        drive_client=drive,
-        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
-        object_storage_client=_FakeObjectStorageClient(),
-    )
+    service = ExecutionService(db, drive_client=drive, oauth_client=_FakeGoogleWorkspaceOAuthClient())
 
     service.run(job.id)
 
@@ -555,180 +475,10 @@ def test_cancellation_stops_forward_execution_cleanly(db: Session) -> None:
     db.commit()
 
     drive = _FakeGoogleDriveClient(files={"f-dup": _drive_file(file_id="f-dup", trashed=False)})
-    service = ExecutionService(
-        db,
-        drive_client=drive,
-        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
-        object_storage_client=_FakeObjectStorageClient(),
-    )
+    service = ExecutionService(db, drive_client=drive, oauth_client=_FakeGoogleWorkspaceOAuthClient())
 
     service.run(job.id)
 
     cancelled_job = jobs.get_by_id(job.id)
     assert cancelled_job.status == ExecutionJobStatus.CANCELLED
     assert drive._files["f-dup"].trashed is False
-
-
-@requires_infra
-def test_forward_trash_marks_the_local_file_trashed_and_triggers_a_storage_refresh(
-    db: Session,
-) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file = _provision_file(db, connector_id=connector.id, name="Dup.txt", provider_file_id="f-dup")
-    plan = _provision_ad_hoc_plan(db, organization_id=user.organization_id, user_id=user.id)
-    _provision_step(db, plan_id=plan.id, file_id=file.id, action_type=ExecutionActionType.REMOVE_DUPLICATE)
-    job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
-
-    drive = _FakeGoogleDriveClient(files={"f-dup": _drive_file(file_id="f-dup", trashed=False)})
-    service = ExecutionService(
-        db,
-        drive_client=drive,
-        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
-        object_storage_client=_FakeObjectStorageClient(),
-    )
-
-    service.run(job.id)
-
-    trashed_file = FileRepository(db).get_by_id(file.id)
-    assert trashed_file.trashed is True
-
-    storage_jobs = StorageAnalysisJobRepository(db).list_for_organization(user.organization_id)
-    assert any(j.triggered_by == StorageAnalysisTrigger.EXECUTION_COMPLETED for j in storage_jobs)
-    recommendation_jobs = RecommendationJobRepository(db).list_for_organization(user.organization_id)
-    assert any(j.triggered_by == RecommendationTrigger.EXECUTION_COMPLETED for j in recommendation_jobs)
-
-
-@requires_infra
-def test_rollback_of_a_trash_marks_the_local_file_active_again(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file = _provision_file(db, connector_id=connector.id, name="Dup.txt", provider_file_id="f-dup")
-    plan = _provision_plan(db, organization_id=user.organization_id, user_id=user.id)
-    _provision_step(db, plan_id=plan.id, file_id=file.id, action_type=ExecutionActionType.REMOVE_DUPLICATE)
-    forward_job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
-
-    drive = _FakeGoogleDriveClient(files={"f-dup": _drive_file(file_id="f-dup", trashed=False)})
-    service = ExecutionService(
-        db,
-        drive_client=drive,
-        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
-        object_storage_client=_FakeObjectStorageClient(),
-    )
-    service.run(forward_job.id)
-    assert FileRepository(db).get_by_id(file.id).trashed is True
-
-    rollback_job = _provision_job(
-        db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id, is_rollback=True
-    )
-    service.run(rollback_job.id)
-
-    assert FileRepository(db).get_by_id(file.id).trashed is False
-
-
-@requires_infra
-def test_create_archive_batch_completes_all_steps_and_produces_one_archive_job(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file_a = _provision_file(db, connector_id=connector.id, name="A.txt", provider_file_id="f-a")
-    file_b = _provision_file(db, connector_id=connector.id, name="B.txt", provider_file_id="f-b")
-    plan = _provision_plan(db, organization_id=user.organization_id, user_id=user.id)
-    step_a = _provision_step(
-        db, plan_id=plan.id, file_id=file_a.id, action_type=ExecutionActionType.CREATE_ARCHIVE, order=0
-    )
-    step_b = _provision_step(
-        db, plan_id=plan.id, file_id=file_b.id, action_type=ExecutionActionType.CREATE_ARCHIVE, order=1
-    )
-    job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
-
-    # CREATE_ARCHIVE only ever reads Drive (download_file) — get_file/
-    # set_trashed etc. are never called for this action type, unlike every
-    # other one, so neither file needs a fake DriveFile registered.
-    drive = _FakeGoogleDriveClient()
-    storage = _FakeObjectStorageClient()
-    service = ExecutionService(
-        db, drive_client=drive, oauth_client=_FakeGoogleWorkspaceOAuthClient(), object_storage_client=storage
-    )
-
-    service.run(job.id)
-
-    completed_job = ExecutionJobRepository(db).get_by_id(job.id)
-    assert completed_job.status == ExecutionJobStatus.COMPLETED
-
-    completed_plan = ExecutionPlanRepository(db).get_by_id(plan.id)
-    assert completed_plan.status == ExecutionPlanStatus.COMPLETED
-
-    assert ExecutionStepRepository(db).get_by_id(step_a.id).status == ExecutionStepStatus.COMPLETED
-    assert ExecutionStepRepository(db).get_by_id(step_b.id).status == ExecutionStepStatus.COMPLETED
-
-    # One batch write, not one per file — the whole point of this action
-    # type's special-cased handling.
-    assert len(storage.put_calls) == 1
-    assert ("download_file", "f-a") in drive.calls
-    assert ("download_file", "f-b") in drive.calls
-    # CREATE_ARCHIVE never mutates Drive — no get_file/set_trashed/etc call.
-    assert not any(call[0] != "download_file" for call in drive.calls)
-
-    archive_job = ArchiveJobRepository(db).get_by_plan_id(plan.id)
-    assert archive_job is not None
-    assert archive_job.status == ArchiveJobStatus.COMPLETED
-    assert archive_job.file_count == 2
-    assert {entry["file_id"] for entry in archive_job.manifest} == {str(file_a.id), str(file_b.id)}
-    assert archive_job.object_storage_key in storage.put_calls
-
-    for step_id in (step_a.id, step_b.id):
-        result = ExecutionResultRepository(db).get_by_job_and_step(
-            execution_job_id=job.id, execution_step_id=step_id
-        )
-        assert result.status == ExecutionResultStatus.SUCCESS
-        rollback_record = RollbackRecordRepository(db).get_by_step(step_id)
-        assert rollback_record.pre_state == {"archive_job_id": str(archive_job.id)}
-
-
-@requires_infra
-def test_create_archive_rollback_deletes_the_object_and_marks_archive_job_failed(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    file = _provision_file(db, connector_id=connector.id, name="A.txt", provider_file_id="f-a")
-    plan = _provision_plan(db, organization_id=user.organization_id, user_id=user.id)
-    step = _provision_step(
-        db, plan_id=plan.id, file_id=file.id, action_type=ExecutionActionType.CREATE_ARCHIVE
-    )
-    forward_job = _provision_job(db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id)
-
-    storage = _FakeObjectStorageClient()
-    service = ExecutionService(
-        db,
-        drive_client=_FakeGoogleDriveClient(),
-        oauth_client=_FakeGoogleWorkspaceOAuthClient(),
-        object_storage_client=storage,
-    )
-    service.run(forward_job.id)
-
-    archive_job = ArchiveJobRepository(db).get_by_plan_id(plan.id)
-    assert archive_job.status == ArchiveJobStatus.COMPLETED
-    uploaded_key = archive_job.object_storage_key
-    assert uploaded_key in storage.put_calls
-
-    rollback_job = _provision_job(
-        db, plan_id=plan.id, organization_id=user.organization_id, user_id=user.id, is_rollback=True
-    )
-    service.run(rollback_job.id)
-
-    completed_rollback_job = ExecutionJobRepository(db).get_by_id(rollback_job.id)
-    assert completed_rollback_job.status == ExecutionJobStatus.COMPLETED
-
-    assert uploaded_key in storage.delete_calls
-    rolled_back_archive_job = ArchiveJobRepository(db).get_by_id(archive_job.id)
-    assert rolled_back_archive_job.status == ArchiveJobStatus.FAILED
-
-    rolled_back_step = ExecutionStepRepository(db).get_by_id(step.id)
-    assert rolled_back_step.status == ExecutionStepStatus.ROLLED_BACK

@@ -42,10 +42,10 @@ function DuplicateGroupDetailPage() {
       apiClient.post<ExecutionPlan>("/v1/execution-plans", { duplicate_group_id: groupId }),
     onSuccess: (plan) => {
       void queryClient.invalidateQueries({ queryKey: ["execution-plans"] });
-      toast.success("Moving to Trash now", {
-        description: "Runs immediately — no approval step required. Recoverable from Google Drive's Trash, or rolled back in Vault.",
+      toast.success("Removal plan created", {
+        description: "Nothing is deleted yet — it moves to Google Drive's Trash only after you approve it, and can still be restored from there or rolled back in Vault.",
         action: {
-          label: "View progress",
+          label: "Review & approve",
           onClick: () => {
             window.location.href = `/execution-plans/${plan.id}`;
           },

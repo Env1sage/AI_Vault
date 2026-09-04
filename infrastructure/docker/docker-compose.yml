@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: vault
       POSTGRES_DB: vault
     ports:
-      - "5434:5432"
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -31,25 +31,6 @@ services:
       timeout: 3s
       retries: 10
 
-  # Archive MVP's object store (ADR — Archive MVP). S3-compatible so
-  # ObjectStorageClient works identically against real S3 in production.
-  minio:
-    image: minio/minio
-    environment:
-      MINIO_ROOT_USER: vault-minio
-      MINIO_ROOT_PASSWORD: vault-minio-secret
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio-data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   backend:
     build:
       context: ../..
@@ -60,18 +41,12 @@ services:
       DATABASE_URL: postgresql+psycopg://vault:vault@postgres:5432/vault
       REDIS_URL: redis://redis:6379/0
       CORS_ALLOW_ORIGINS: http://localhost:5173
-      OBJECT_STORAGE_ENDPOINT_URL: http://minio:9000
-      OBJECT_STORAGE_ACCESS_KEY: vault-minio
-      OBJECT_STORAGE_SECRET_KEY: vault-minio-secret
-      OBJECT_STORAGE_BUCKET: vault-archives
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      minio:
         condition: service_healthy
     volumes:
       - ../../apps/backend:/workspace/apps/backend
@@ -88,16 +63,10 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://vault:vault@postgres:5432/vault
       REDIS_URL: redis://redis:6379/0
-      OBJECT_STORAGE_ENDPOINT_URL: http://minio:9000
-      OBJECT_STORAGE_ACCESS_KEY: vault-minio
-      OBJECT_STORAGE_SECRET_KEY: vault-minio-secret
-      OBJECT_STORAGE_BUCKET: vault-archives
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      minio:
         condition: service_healthy
     volumes:
       - ../../apps/worker:/workspace/apps/worker
@@ -123,5 +92,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  minio-data:
   frontend-node-modules:

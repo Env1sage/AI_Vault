@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
 import type { Connector, FileListResponse, FileSummary } from "@vault/types";
 import {
@@ -6,11 +6,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Cloud,
-  Download,
-  FolderInput,
   LayoutGrid,
   List,
-  PencilLine,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -20,8 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { MoveDialog } from "@/components/file-explorer/move-dialog";
-import { RenameDialog } from "@/components/file-explorer/rename-dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -31,9 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "@/components/ui/toaster";
-import { ApiError, apiClient } from "@/lib/api-client";
-import { downloadFile } from "@/lib/download-file";
+import { apiClient } from "@/lib/api-client";
 import { fileTypeIconElement, fileTypeLabel } from "@/lib/file-icon";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatRelativeTime } from "@/lib/format-relative-time";
@@ -51,7 +44,6 @@ export const Route = createFileRoute("/files/")({
 
 type SortKey = "name" | "size" | "modified";
 type ViewMode = "list" | "grid";
-type OwnershipFilter = "all" | "mine" | "shared";
 
 const PAGE_SIZE = 50;
 
@@ -66,89 +58,12 @@ function folderOf(path: string, name: string): string {
   return trimmed.length > 0 ? trimmed : "Root";
 }
 
-function useFileDownload(file: FileSummary) {
-  return useMutation({
-    mutationFn: () => downloadFile(`/v1/files/${file.id}/download`, file.name),
-    onError: (error) => {
-      toast.error(error instanceof ApiError ? error.message : "Couldn't download this file.");
-    },
-  });
-}
-
-interface FileRowActionsProps {
-  file: FileSummary;
-  canManage: boolean;
-  onRename: (file: FileSummary) => void;
-  onMove: (file: FileSummary) => void;
-  className?: string;
-}
-
-function FileRowActions({ file, canManage, onRename, onMove, className }: FileRowActionsProps) {
-  const downloadMutation = useFileDownload(file);
-
-  function stop<E extends { preventDefault: () => void; stopPropagation: () => void }>(
-    e: E,
-    action: () => void,
-  ) {
-    e.preventDefault();
-    e.stopPropagation();
-    action();
-  }
-
-  return (
-    <div className={cn("flex shrink-0 items-center gap-0.5", className)}>
-      {canManage && (
-        <button
-          type="button"
-          aria-label={`Rename ${file.name}`}
-          onClick={(e) => stop(e, () => onRename(file))}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-        >
-          <PencilLine className="size-4" />
-        </button>
-      )}
-      {canManage && (
-        <button
-          type="button"
-          aria-label={`Move ${file.name}`}
-          onClick={(e) => stop(e, () => onMove(file))}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-        >
-          <FolderInput className="size-4" />
-        </button>
-      )}
-      <button
-        type="button"
-        aria-label={`Download ${file.name}`}
-        disabled={downloadMutation.isPending}
-        onClick={(e) => stop(e, () => downloadMutation.mutate())}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-50"
-      >
-        <Download className="size-4" />
-      </button>
-    </div>
-  );
-}
-
-function fileSubtitle(file: FileSummary, isOwned: boolean): string {
-  if (!isOwned) return `Shared by ${file.owner_email ?? "someone else"}`;
-  return folderOf(file.path, file.name);
-}
-
-interface FileEntryProps {
-  file: FileSummary;
-  isOwned: boolean;
-  canManage: boolean;
-  onRename: (file: FileSummary) => void;
-  onMove: (file: FileSummary) => void;
-}
-
-function FileRow({ file, isOwned, canManage, onRename, onMove }: FileEntryProps) {
+function FileRow({ file }: { file: FileSummary }) {
   return (
     <Link
       to="/files/$fileId"
       params={{ fileId: file.id }}
-      className="group grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-secondary/60"
+      className="group grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-secondary/60"
     >
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground group-hover:bg-card">
@@ -156,7 +71,7 @@ function FileRow({ file, isOwned, canManage, onRename, onMove }: FileEntryProps)
         </span>
         <div className="min-w-0">
           <p className="truncate font-medium">{file.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{fileSubtitle(file, isOwned)}</p>
+          <p className="truncate text-xs text-muted-foreground">{folderOf(file.path, file.name)}</p>
         </div>
       </div>
       <span className="hidden w-24 shrink-0 truncate text-xs text-muted-foreground sm:block">
@@ -168,36 +83,23 @@ function FileRow({ file, isOwned, canManage, onRename, onMove }: FileEntryProps)
       <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
         {file.provider_modified_at ? formatRelativeTime(file.provider_modified_at) : "—"}
       </span>
-      <FileRowActions
-        file={file}
-        canManage={canManage && isOwned}
-        onRename={onRename}
-        onMove={onMove}
-      />
     </Link>
   );
 }
 
-function FileGridCard({ file, isOwned, canManage, onRename, onMove }: FileEntryProps) {
+function FileGridCard({ file }: { file: FileSummary }) {
   return (
     <Link
       to="/files/$fileId"
       params={{ fileId: file.id }}
-      className="group relative flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-clay-sm transition-all hover:-translate-y-0.5 hover:shadow-clay"
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-clay-sm transition-all hover:-translate-y-0.5 hover:shadow-clay"
     >
-      <FileRowActions
-        file={file}
-        canManage={canManage && isOwned}
-        onRename={onRename}
-        onMove={onMove}
-        className="absolute right-3 top-3 rounded-md bg-card opacity-0 shadow-clay-sm group-hover:opacity-100"
-      />
       <div className="flex aspect-video items-center justify-center rounded-lg bg-secondary">
         {fileTypeIconElement(file.mime_type, { className: "size-8 text-muted-foreground" })}
       </div>
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{file.name}</p>
-        <p className="truncate text-xs text-muted-foreground">{fileSubtitle(file, isOwned)}</p>
+        <p className="truncate text-xs text-muted-foreground">{folderOf(file.path, file.name)}</p>
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{file.size_bytes !== null ? formatBytes(file.size_bytes) : "—"}</span>
@@ -216,20 +118,10 @@ function FilesPage() {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("modified");
   const [page, setPage] = useState(0);
-  const [renamingFile, setRenamingFile] = useState<FileSummary | null>(null);
-  const [movingFile, setMovingFile] = useState<FileSummary | null>(null);
-  const [ownership, setOwnership] = useState<OwnershipFilter>("all");
-  const user = useAuthStore((state) => state.user);
-  const canManage = user?.role === "owner" || user?.role === "admin";
 
   function changeView(mode: ViewMode) {
     setViewMode(mode);
     window.localStorage.setItem("vault-file-view", mode);
-  }
-
-  function changeOwnership(next: OwnershipFilter) {
-    setOwnership(next);
-    setPage(0);
   }
 
   const connectorsQuery = useQuery({
@@ -242,11 +134,10 @@ function FilesPage() {
   );
 
   const filesQuery = useQuery({
-    queryKey: ["files", connector?.id, page, ownership],
+    queryKey: ["files", connector?.id, page],
     queryFn: () =>
       apiClient.get<FileListResponse>(
-        `/v1/connectors/${connector?.id}/files?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}` +
-          (ownership === "all" ? "" : `&ownership=${ownership}`),
+        `/v1/connectors/${connector?.id}/files?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`,
       ),
     enabled: connector !== undefined,
   });
@@ -300,29 +191,6 @@ function FilesPage() {
 
         {connector && (
           <>
-            <div className="flex items-center gap-1 rounded-lg bg-secondary p-1 w-fit">
-              {(
-                [
-                  ["all", "All files"],
-                  ["mine", "My files"],
-                  ["shared", "Shared with me"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => changeOwnership(value)}
-                  aria-pressed={ownership === value}
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-sm transition-colors",
-                    ownership === value ? "bg-card shadow-clay-sm" : "text-muted-foreground",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
             <Card className="flex flex-wrap items-center gap-2 p-2">
               <Input
                 value={query}
@@ -382,7 +250,7 @@ function FilesPage() {
               <EmptyState title="Couldn't load files" description="Please try again." />
             )}
 
-            {filesQuery.isSuccess && files.length === 0 && ownership === "all" && (
+            {filesQuery.isSuccess && files.length === 0 && (
               <EmptyState
                 title="No files yet"
                 description="Run a scan to let Vault index this connector's storage."
@@ -394,42 +262,17 @@ function FilesPage() {
               />
             )}
 
-            {filesQuery.isSuccess && files.length === 0 && ownership !== "all" && (
-              <EmptyState
-                title={ownership === "mine" ? "No files owned by you" : "Nothing shared with you"}
-                description={
-                  ownership === "mine"
-                    ? "Every scanned file here is shared by someone else."
-                    : "No one else has shared a file with this account yet."
-                }
-              />
-            )}
-
             {visibleFiles.length > 0 &&
               (viewMode === "list" ? (
                 <Card className="flex flex-col divide-y divide-border p-1">
                   {visibleFiles.map((file) => (
-                    <FileRow
-                      key={file.id}
-                      file={file}
-                      isOwned={file.owner_email === connector.account_email}
-                      canManage={canManage}
-                      onRename={setRenamingFile}
-                      onMove={setMovingFile}
-                    />
+                    <FileRow key={file.id} file={file} />
                   ))}
                 </Card>
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {visibleFiles.map((file) => (
-                    <FileGridCard
-                      key={file.id}
-                      file={file}
-                      isOwned={file.owner_email === connector.account_email}
-                      canManage={canManage}
-                      onRename={setRenamingFile}
-                      onMove={setMovingFile}
-                    />
+                    <FileGridCard key={file.id} file={file} />
                   ))}
                 </div>
               ))}
@@ -466,21 +309,6 @@ function FilesPage() {
           </>
         )}
       </div>
-
-      {renamingFile && (
-        <RenameDialog
-          onOpenChange={(open) => !open && setRenamingFile(null)}
-          fileId={renamingFile.id}
-          currentName={renamingFile.name}
-        />
-      )}
-      {movingFile && connector && (
-        <MoveDialog
-          onOpenChange={(open) => !open && setMovingFile(null)}
-          connectorId={connector.id}
-          fileIds={[movingFile.id]}
-        />
-      )}
     </AppShell>
   );
 }

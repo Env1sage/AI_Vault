@@ -14,7 +14,6 @@ from app.application.workflow_service import WorkflowDetail
 from vault_shared.db.models import (
     AIProviderConfig,
     ApprovalRequest,
-    ArchiveJob,
     AutomationTemplate,
     Citation,
     Conversation,
@@ -265,24 +264,6 @@ class FileSummaryResponse(BaseModel):
 class FileListResponse(BaseModel):
     items: list[FileSummaryResponse]
     total: int
-
-
-class FolderSummaryResponse(BaseModel):
-    """Backs the Files browser's "Move to folder" picker — `provider_file_id`
-    is the value a `MOVE_FILE` plan's `new_parent_id` must carry (Drive's
-    own id, not this platform's `id`), since that's what
-    `GoogleDriveClient.move_file` is called with at execution time."""
-
-    id: str
-    provider_file_id: str
-    name: str
-    path: str
-
-    @classmethod
-    def from_model(cls, file: File) -> "FolderSummaryResponse":
-        return cls(
-            id=str(file.id), provider_file_id=file.provider_file_id, name=file.name, path=file.path
-        )
 
 
 class FileMetadataResponse(BaseModel):
@@ -1007,56 +988,6 @@ class ExecutionPlanDetailResponse(ExecutionPlanResponse):
         )
 
 
-class ArchiveManifestEntry(BaseModel):
-    file_id: str
-    name: str
-    path: str
-    size_bytes: int
-    mime_type: str | None
-    checksum_sha256: str
-
-
-class ArchiveJobResponse(BaseModel):
-    id: str
-    organization_id: str
-    execution_plan_id: str
-    name: str
-    status: str
-    object_storage_key: str | None
-    original_size_bytes: int | None
-    compressed_size_bytes: int | None
-    file_count: int
-    created_by_user_id: str
-    created_at: datetime
-    completed_at: datetime | None
-
-    @classmethod
-    def from_model(cls, archive_job: ArchiveJob) -> "ArchiveJobResponse":
-        return cls(
-            id=str(archive_job.id),
-            organization_id=str(archive_job.organization_id),
-            execution_plan_id=str(archive_job.execution_plan_id),
-            name=archive_job.name,
-            status=archive_job.status,
-            object_storage_key=archive_job.object_storage_key,
-            original_size_bytes=archive_job.original_size_bytes,
-            compressed_size_bytes=archive_job.compressed_size_bytes,
-            file_count=archive_job.file_count,
-            created_by_user_id=str(archive_job.created_by_user_id),
-            created_at=archive_job.created_at,
-            completed_at=archive_job.completed_at,
-        )
-
-
-class ArchiveJobDetailResponse(ArchiveJobResponse):
-    manifest: list[ArchiveManifestEntry]
-
-    @classmethod
-    def from_model_detail(cls, archive_job: ArchiveJob) -> "ArchiveJobDetailResponse":
-        base = ArchiveJobResponse.from_model(archive_job)
-        return cls(**base.model_dump(), manifest=archive_job.manifest)
-
-
 class CreateExecutionPlanRequest(BaseModel):
     """Exactly one origin must be set — validated in the router, which
     calls the matching `ExecutionPlanService` method. `file_ids` (with
@@ -1068,8 +999,6 @@ class CreateExecutionPlanRequest(BaseModel):
     duplicate_group_id: str | None = None
     file_ids: list[str] | None = None
     action_type: str | None = None
-    new_name: str | None = None
-    new_parent_id: str | None = None
 
 
 class ApprovalRequestResponse(BaseModel):
