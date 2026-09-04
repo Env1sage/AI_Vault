@@ -10,14 +10,11 @@ from vault_shared.db.session import Base
 
 
 class ExecutionActionType(enum.StrEnum):
-    """The Phase 8 spec's "Supported initial actions" list, plus two later
-    additions (`CREATE_ARCHIVE`, `PERMANENT_DELETE`). `ARCHIVE`/
-    `REMOVE_DUPLICATE` use Drive's own recoverable Trash (see
-    `GoogleDriveClient.set_trashed`) — `PERMANENT_DELETE` is the one
-    exception that calls real `files.delete`, and is deliberately never
-    reachable from the generic ad-hoc plan path or instant auto-approval
-    (see `ExecutionPlanService.create_permanent_delete_plan` and the
-    execution-plans router's dedicated endpoint for it)."""
+    """The Phase 8 spec's "Supported initial actions" list. Deletion is
+    deliberately absent — the spec explicitly forbids permanent deletion
+    this phase; `ARCHIVE`/`REMOVE_DUPLICATE` use Drive's own recoverable
+    Trash instead (see `GoogleDriveClient.set_trashed`), never
+    `files.delete`."""
 
     MOVE_FILE = "move_file"
     MOVE_FOLDER = "move_folder"
@@ -30,9 +27,6 @@ class ExecutionActionType(enum.StrEnum):
     # completed together by one batch operation in ExecutionService rather
     # than independently, see _execute_archive_batch.
     CREATE_ARCHIVE = "create_archive"
-    # Real, unrecoverable Drive deletion — only reachable from a file
-    # that's already `trashed`, never auto-approved, never rollback-able.
-    PERMANENT_DELETE = "permanent_delete"
 
 
 class ExecutionStepStatus(enum.StrEnum):

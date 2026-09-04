@@ -105,7 +105,6 @@ describe("actionTypeLabel", () => {
     expect(actionTypeLabel("archive")).toContain("Archive");
     expect(actionTypeLabel("remove_duplicate")).toContain("Remove duplicate");
     expect(actionTypeLabel("update_metadata")).toBe("Update metadata");
-    expect(actionTypeLabel("permanent_delete")).toContain("Permanently delete");
   });
 
   it("falls back to the raw value for an unknown action type", () => {

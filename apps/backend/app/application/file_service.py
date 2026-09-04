@@ -108,21 +108,6 @@ class FileService:
             raise NotFoundError("Connector not found.")
         return self._files.search_folders_for_connector(connector_id, query=query, limit=limit)
 
-    def list_trashed_for_connector(
-        self, connector_id: uuid.UUID, *, organization_id: uuid.UUID, limit: int, offset: int
-    ) -> tuple[list[File], int]:
-        """Backs the Trash browse view — files this platform has already
-        moved to Drive's Trash (ARCHIVE/REMOVE_DUPLICATE) and not yet
-        permanently deleted. Google keeps counting these against the
-        account's real storage quota until they're emptied from Trash, so
-        this is where "Permanently delete" is offered."""
-        connector = self._connectors.get_by_id(connector_id)
-        if connector is None or connector.organization_id != organization_id:
-            raise NotFoundError("Connector not found.")
-        files = self._files.list_trashed_for_connector(connector_id, limit=limit, offset=offset)
-        total = self._files.count_trashed_for_connector(connector_id)
-        return files, total
-
     def get_detail(self, file_id: uuid.UUID, *, organization_id: uuid.UUID) -> FileDetail:
         file = self._files.get_owned_by_organization(file_id, organization_id=organization_id)
         if file is None:

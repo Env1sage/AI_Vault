@@ -299,32 +299,6 @@ class _FakeFolder:
         self.path = f"/{name}"
 
 
-def test_list_trashed_files_requires_authentication(fake_file_service) -> None:
-    response = client.get(f"/v1/connectors/{uuid.uuid4()}/trash")
-    assert response.status_code == 401
-
-
-def test_list_trashed_files_returns_a_paginated_envelope(as_member, fake_file_service) -> None:
-    fake_file_service.list_trashed_for_connector.return_value = ([_FakeFile()], 1)
-
-    response = client.get(f"/v1/connectors/{uuid.uuid4()}/trash")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["total"] == 1
-    assert len(body["items"]) == 1
-
-
-def test_list_trashed_files_returns_not_found_for_another_organizations_connector(
-    as_member, fake_file_service
-) -> None:
-    fake_file_service.list_trashed_for_connector.side_effect = NotFoundError("Connector not found.")
-
-    response = client.get(f"/v1/connectors/{uuid.uuid4()}/trash")
-
-    assert response.status_code == 404
-
-
 def test_search_folders_requires_authentication(fake_file_service) -> None:
     response = client.get(f"/v1/connectors/{uuid.uuid4()}/folders")
     assert response.status_code == 401

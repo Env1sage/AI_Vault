@@ -50,16 +50,6 @@ class File(Base):
     # ExecutionStep.target_file_id's ON DELETE CASCADE would otherwise wipe
     # out the very RollbackRecord/audit trail the trash action just created.
     trashed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Set by ExecutionService after a successful PERMANENT_DELETE step
-    # (Drive's real, unrecoverable `files.delete` — never called for any
-    # other action type). Only reachable from a file that's already
-    # `trashed`; never cleared, since there's no rollback for this action
-    # (`ExecutionPlan.rollback_available=False` on every permanent-delete
-    # plan). The row itself still isn't deleted, same ON DELETE CASCADE
-    # reasoning as `trashed` above.
-    permanently_deleted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
     permissions_summary: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     version_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(255), nullable=True)

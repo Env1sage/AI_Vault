@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Query, Session
@@ -75,24 +75,6 @@ class FileRepository:
             return []
         return self._for_organization(organization_id).filter(File.id.in_(file_ids)).all()
 
-    def list_owned_by_organization_including_trashed(
-        self, file_ids: list[uuid.UUID], *, organization_id: uuid.UUID
-    ) -> list[File]:
-        """Same org-scoped security guarantee as `list_owned_by_organization`
-        (never trust a caller-supplied id list), but without
-        `_for_organization`'s trashed/ownership exclusions — used only by
-        `create_permanent_delete_plan`, whose whole eligibility rule is
-        that the candidates ARE already trashed."""
-        if not file_ids:
-            return []
-        return (
-            self._session.query(File)
-            .join(StorageSource, File.storage_source_id == StorageSource.id)
-            .join(StorageConnector, StorageSource.connector_id == StorageConnector.id)
-            .filter(StorageConnector.organization_id == organization_id, File.id.in_(file_ids))
-            .all()
-        )
-
     def get_by_source_and_provider_id(
         self, *, storage_source_id: uuid.UUID, provider_file_id: str
     ) -> File | None:
@@ -164,14 +146,6 @@ class FileRepository:
         file.trashed = trashed
         self._session.flush()
 
-    def mark_permanently_deleted(self, file: File) -> None:
-        """Called by `ExecutionService` right after a successful
-        PERMANENT_DELETE — never cleared, since there's no rollback for a
-        real Drive deletion (see `File.permanently_deleted_at`'s
-        docstring)."""
-        file.permanently_deleted_at = datetime.now(UTC)
-        self._session.flush()
-
     def count_for_source(self, storage_source_id: uuid.UUID) -> int:
         return self._session.query(File).filter_by(storage_source_id=storage_source_id).count()
 
@@ -198,23 +172,17 @@ class FileRepository:
     def _for_connector(self, connector_id: uuid.UUID, *, ownership: str | None = None) -> Query[File]:
         """`ownership` backs the Files browser's "All / My files / Shared
         with me" filter — `None` (the default, every other caller) keeps
-        the unfiltered-by-ownership behavior every existing caller relies
-        on. `"mine"`/`"shared"` compare `File.owner_email` against the
+        the unfiltered behavior every existing caller relies on.
+        `"mine"`/`"shared"` compare `File.owner_email` against the
         connector's own `account_email`, same signal already used to keep
         shared-with-me files out of Storage Intelligence's totals
         (`_for_organization`) — here it's a user-chosen view, not an
         always-on exclusion, since Files is meant to be a complete browse
-        surface.
-
-        Always excludes `trashed` rows, unconditionally — a file the
-        Execution Engine already trashed shouldn't keep showing up in the
-        main browse list with working-looking Rename/Move buttons; see
-        `list_trashed_for_connector` for the dedicated Trash view."""
+        surface."""
         query = (
             self._session.query(File)
             .join(StorageSource, File.storage_source_id == StorageSource.id)
             .filter(StorageSource.connector_id == connector_id)
-            .filter(File.trashed.is_(False))
         )
         if ownership is not None:
             query = query.join(StorageConnector, StorageSource.connector_id == StorageConnector.id)
@@ -238,34 +206,6 @@ class FileRepository:
     def count_for_connector(self, connector_id: uuid.UUID, *, ownership: str | None = None) -> int:
         return self._for_connector(connector_id, ownership=ownership).count()
 
-    def _trashed_for_connector(self, connector_id: uuid.UUID) -> Query[File]:
-        """Deliberately not built on `_for_connector` — that base
-        unconditionally excludes trashed rows; this is the one place that
-        wants exactly the opposite. Also excludes rows already
-        `permanently_deleted_at` — once gone, a file has nothing left to
-        show in a "Trash" browse view."""
-        return (
-            self._session.query(File)
-            .join(StorageSource, File.storage_source_id == StorageSource.id)
-            .filter(StorageSource.connector_id == connector_id)
-            .filter(File.trashed.is_(True))
-            .filter(File.permanently_deleted_at.is_(None))
-        )
-
-    def list_trashed_for_connector(
-        self, connector_id: uuid.UUID, *, limit: int, offset: int
-    ) -> list[File]:
-        return (
-            self._trashed_for_connector(connector_id)
-            .order_by(File.name)
-            .limit(limit)
-            .offset(offset)
-            .all()
-        )
-
-    def count_trashed_for_connector(self, connector_id: uuid.UUID) -> int:
-        return self._trashed_for_connector(connector_id).count()
-
     def search_folders_for_connector(
         self, connector_id: uuid.UUID, *, query: str, limit: int
     ) -> list[File]:
@@ -273,13 +213,13 @@ class FileRepository:
         not a full folder-tree browse (out of scope for this round, see the
         Files browser's flat listing), just a name search restricted to
         folder-mime-type rows so the destination `provider_file_id` for a
-        `MOVE_FILE` step can be picked without one. `_for_connector`
-        already excludes trashed rows — nothing should be moved into
-        Drive's Trash this way."""
+        `MOVE_FILE` step can be picked without one. Excludes trashed
+        folders — nothing should be moved into Drive's Trash this way."""
         pattern = f"%{query.strip()}%"
         return (
             self._for_connector(connector_id)
             .filter(File.mime_type == GOOGLE_FOLDER_MIME_TYPE)
+            .filter(File.trashed.is_(False))
             .filter(File.name.ilike(pattern))
             .order_by(File.name)
             .limit(limit)

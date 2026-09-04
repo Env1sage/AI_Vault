@@ -238,13 +238,14 @@ class GoogleDriveClient:
         return self._to_drive_file(payload)
 
     def set_trashed(self, *, access_token: str, file_id: str, trashed: bool) -> DriveFile:
-        """The Execution Engine's `archive`/`remove_duplicate` actions —
-        implemented as Drive's own Trash (`trashed: true`), deliberately
-        *not* permanent deletion (`files.delete`, see `delete_file` below).
-        Trashed items remain recoverable directly in Drive and via
-        `trashed: false` here, which is exactly what makes both actions
-        genuinely reversible rather than "irreversible unless the founder
-        digs through Drive's own trash UI in time.\""""
+        """The Execution Engine's `archive`/`remove_duplicate` actions
+        (Phase 8) — implemented as Drive's own Trash (`trashed: true`),
+        deliberately *not* permanent deletion (`files.delete`), which the
+        phase spec explicitly forbids this phase. Trashed items remain
+        recoverable directly in Drive and via `trashed: false` here, which
+        is exactly what makes both actions genuinely reversible rather than
+        "irreversible unless the founder digs through Drive's own trash
+        UI in time.\""""
         payload = self._patch(
             f"{DRIVE_API_BASE}/files/{file_id}",
             access_token=access_token,
@@ -252,21 +253,6 @@ class GoogleDriveClient:
             json_body={"trashed": trashed},
         )
         return self._to_drive_file(payload)
-
-    def delete_file(self, *, access_token: str, file_id: str) -> None:
-        """Real, unrecoverable deletion (`files.delete`) — the one Drive
-        mutation every other Execution Engine action deliberately avoids
-        (see `set_trashed` above). Only ever called by the
-        `PERMANENT_DELETE` action, itself only reachable from a file
-        that's already sitting in Drive's own Trash: Google's own storage
-        accounting keeps counting a trashed file against quota until it's
-        either emptied from Trash in Drive directly or deleted this way."""
-        self._request(
-            f"{DRIVE_API_BASE}/files/{file_id}",
-            access_token=access_token,
-            params={"supportsAllDrives": "true"},
-            method="DELETE",
-        )
 
     def update_app_properties(
         self, *, access_token: str, file_id: str, properties: dict[str, str]

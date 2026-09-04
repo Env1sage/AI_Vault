@@ -592,63 +592,6 @@ def test_create_ad_hoc_plan_rejects_an_empty_selection(db: Session) -> None:
         )
 
 
-@requires_infra
-def test_create_permanent_delete_plan_targets_only_already_trashed_files(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    files = FileRepository(db)
-    trashed = _provision_file(db, connector_id=connector.id, name="trashed.pdf", provider_file_id="f-a")
-    files.mark_trashed(trashed, trashed=True)
-    active = _provision_file(db, connector_id=connector.id, name="active.pdf", provider_file_id="f-b")
-    service = ExecutionPlanService(db)
-
-    plan = service.create_permanent_delete_plan(
-        [trashed.id, active.id], organization_id=user.organization_id, user_id=user.id
-    )
-
-    detail = service.get_detail(plan.id, organization_id=user.organization_id)
-    assert {s.target_file_id for s in detail.steps} == {trashed.id}
-    assert all(s.action_type == ExecutionActionType.PERMANENT_DELETE for s in detail.steps)
-    assert plan.rollback_available is False
-
-
-@requires_infra
-def test_create_permanent_delete_plan_rejects_when_nothing_is_eligible(db: Session) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    active = _provision_file(db, connector_id=connector.id, name="active.pdf", provider_file_id="f-a")
-    service = ExecutionPlanService(db)
-
-    with pytest.raises(ValidationError):
-        service.create_permanent_delete_plan(
-            [active.id], organization_id=user.organization_id, user_id=user.id
-        )
-
-
-@requires_infra
-def test_create_permanent_delete_plan_excludes_already_permanently_deleted_files(
-    db: Session,
-) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(
-        db, organization_id=user.organization_id, user_id=user.id, granted_scopes=DRIVE_WRITE_SCOPE
-    )
-    files = FileRepository(db)
-    gone = _provision_file(db, connector_id=connector.id, name="gone.pdf", provider_file_id="f-a")
-    files.mark_trashed(gone, trashed=True)
-    files.mark_permanently_deleted(gone)
-    service = ExecutionPlanService(db)
-
-    with pytest.raises(ValidationError):
-        service.create_permanent_delete_plan(
-            [gone.id], organization_id=user.organization_id, user_id=user.id
-        )
-
-
 # ----------------------------------------------------------------------
 # ApprovalService
 # ----------------------------------------------------------------------

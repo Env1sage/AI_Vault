@@ -7,8 +7,7 @@ export type ExecutionActionType =
   | "archive"
   | "remove_duplicate"
   | "update_metadata"
-  | "create_archive"
-  | "permanent_delete";
+  | "create_archive";
 
 export type ExecutionStepStatus = "pending" | "completed" | "failed" | "skipped" | "rolled_back";
 

@@ -157,8 +157,6 @@ export function actionTypeLabel(actionType: string): string {
       return "Update metadata";
     case "create_archive":
       return "Create archive";
-    case "permanent_delete":
-      return "Permanently delete (unrecoverable)";
     default:
       return actionType;
   }

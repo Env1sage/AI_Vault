@@ -172,51 +172,6 @@ def test_list_for_connector_ownership_none_returns_everything(db: Session) -> No
 
 
 @requires_infra
-def test_list_for_connector_excludes_trashed_files(db: Session) -> None:
-    """Regression guard: a file the Execution Engine already trashed
-    shouldn't keep showing up in the main Files browse list with
-    working-looking Rename/Move/Download buttons."""
-    user = _provision_user(db)
-    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
-    active = _provision_file(db, connector_id=connector.id, name="Active.pdf")
-    trashed = _provision_file(db, connector_id=connector.id, name="Trashed.pdf")
-    FileRepository(db).mark_trashed(trashed, trashed=True)
-    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
-
-    files, total = service.list_for_connector(
-        connector.id, organization_id=user.organization_id, limit=10, offset=0
-    )
-
-    assert total == 1
-    assert {f.name for f in files} == {"Active.pdf"}
-    assert active.name == "Active.pdf"
-
-
-@requires_infra
-def test_list_trashed_for_connector_returns_only_trashed_and_not_yet_permanently_deleted(
-    db: Session,
-) -> None:
-    user = _provision_user(db)
-    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
-    files_repo = FileRepository(db)
-    active = _provision_file(db, connector_id=connector.id, name="Active.pdf")
-    trashed = _provision_file(db, connector_id=connector.id, name="Trashed.pdf")
-    files_repo.mark_trashed(trashed, trashed=True)
-    gone = _provision_file(db, connector_id=connector.id, name="Gone.pdf")
-    files_repo.mark_trashed(gone, trashed=True)
-    files_repo.mark_permanently_deleted(gone)
-    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
-
-    files, total = service.list_trashed_for_connector(
-        connector.id, organization_id=user.organization_id, limit=10, offset=0
-    )
-
-    assert total == 1
-    assert {f.name for f in files} == {"Trashed.pdf"}
-    assert active.name == "Active.pdf"
-
-
-@requires_infra
 def test_list_for_connector_returns_files_and_total_count(db: Session) -> None:
     user = _provision_user(db)
     connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
