@@ -18,7 +18,18 @@ from vault_shared.db.repositories import (
     StorageConnectorRepository,
     StorageSourceRepository,
 )
+from vault_shared.connectors.google_workspace import GoogleTokenSet
 from vault_shared.db.session import get_session_factory
+
+
+class _FakeGoogleWorkspaceOAuthClient:
+    """Stands in for the real OAuth client via constructor injection — none
+    of these tests exercise a Drive call, so `refresh_access_token` is
+    never actually invoked, but `FileService` requires an `oauth_client` to
+    construct its internal `ConnectorTokenService`."""
+
+    def refresh_access_token(self, *, refresh_token: str) -> GoogleTokenSet:
+        raise NotImplementedError
 
 
 def _reachable(url: str) -> bool:
@@ -76,7 +87,14 @@ def _provision_connector(db: Session, *, organization_id: uuid.UUID, user_id: uu
     )
 
 
-def _provision_file(db: Session, *, connector_id: uuid.UUID, name: str):
+def _provision_file(
+    db: Session,
+    *,
+    connector_id: uuid.UUID,
+    name: str,
+    mime_type: str = "application/pdf",
+    owner_email: str = "founder@acme.com",
+):
     source = StorageSourceRepository(db).upsert(
         connector_id=connector_id, provider_drive_id="root", name="My Drive", drive_type=DriveType.MY_DRIVE
     )
@@ -88,9 +106,9 @@ def _provision_file(db: Session, *, connector_id: uuid.UUID, name: str):
         parent_folder_id=None,
         name=name,
         path=f"/{name}",
-        mime_type="application/pdf",
+        mime_type=mime_type,
         size_bytes=1024,
-        owner_email="founder@acme.com",
+        owner_email=owner_email,
         is_shared=False,
         permissions_summary=None,
         version_id=None,
@@ -106,12 +124,60 @@ def _provision_file(db: Session, *, connector_id: uuid.UUID, name: str):
 
 
 @requires_infra
+def test_list_for_connector_ownership_mine_excludes_shared_with_me_files(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
+    _provision_file(db, connector_id=connector.id, name="Mine.pdf", owner_email="founder@acme.com")
+    _provision_file(db, connector_id=connector.id, name="Shared.pdf", owner_email="someone-else@example.com")
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
+
+    files, total = service.list_for_connector(
+        connector.id, organization_id=user.organization_id, limit=10, offset=0, ownership="mine"
+    )
+
+    assert total == 1
+    assert {f.name for f in files} == {"Mine.pdf"}
+
+
+@requires_infra
+def test_list_for_connector_ownership_shared_excludes_owned_files(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
+    _provision_file(db, connector_id=connector.id, name="Mine.pdf", owner_email="founder@acme.com")
+    _provision_file(db, connector_id=connector.id, name="Shared.pdf", owner_email="someone-else@example.com")
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
+
+    files, total = service.list_for_connector(
+        connector.id, organization_id=user.organization_id, limit=10, offset=0, ownership="shared"
+    )
+
+    assert total == 1
+    assert {f.name for f in files} == {"Shared.pdf"}
+
+
+@requires_infra
+def test_list_for_connector_ownership_none_returns_everything(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
+    _provision_file(db, connector_id=connector.id, name="Mine.pdf", owner_email="founder@acme.com")
+    _provision_file(db, connector_id=connector.id, name="Shared.pdf", owner_email="someone-else@example.com")
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
+
+    files, total = service.list_for_connector(
+        connector.id, organization_id=user.organization_id, limit=10, offset=0
+    )
+
+    assert total == 2
+    assert {f.name for f in files} == {"Mine.pdf", "Shared.pdf"}
+
+
+@requires_infra
 def test_list_for_connector_returns_files_and_total_count(db: Session) -> None:
     user = _provision_user(db)
     connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
     _provision_file(db, connector_id=connector.id, name="Report.pdf")
     _provision_file(db, connector_id=connector.id, name="Invoice.pdf")
-    service = FileService(db)
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
 
     files, total = service.list_for_connector(
         connector.id, organization_id=user.organization_id, limit=10, offset=0
@@ -126,7 +192,7 @@ def test_list_for_connector_rejects_a_connector_from_another_organization(db: Se
     user = _provision_user(db)
     other_user = _provision_user(db)
     connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
-    service = FileService(db)
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
 
     with pytest.raises(NotFoundError):
         service.list_for_connector(
@@ -172,7 +238,7 @@ def test_get_detail_assembles_metadata_classification_and_relationships(db: Sess
     )
     db.commit()
 
-    service = FileService(db)
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
     detail = service.get_detail(file.id, organization_id=user.organization_id)
 
     assert detail.metadata.version_label == "v2"
@@ -188,7 +254,7 @@ def test_get_detail_rejects_a_file_from_another_organization(db: Session) -> Non
     other_user = _provision_user(db)
     connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
     file = _provision_file(db, connector_id=connector.id, name="Report.pdf")
-    service = FileService(db)
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
 
     with pytest.raises(NotFoundError):
         service.get_detail(file.id, organization_id=other_user.organization_id)
@@ -199,7 +265,7 @@ def test_get_detail_handles_a_file_with_no_enrichment_yet(db: Session) -> None:
     user = _provision_user(db)
     connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
     file = _provision_file(db, connector_id=connector.id, name="Report.pdf")
-    service = FileService(db)
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
 
     detail = service.get_detail(file.id, organization_id=user.organization_id)
 
@@ -208,3 +274,47 @@ def test_get_detail_handles_a_file_with_no_enrichment_yet(db: Session) -> None:
     assert detail.extraction is None
     assert detail.knowledge_attributes == []
     assert detail.related_files == []
+
+
+@requires_infra
+def test_search_folders_matches_by_name_and_excludes_non_folders(db: Session) -> None:
+    user = _provision_user(db)
+    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
+    _provision_file(
+        db,
+        connector_id=connector.id,
+        name="Finance",
+        mime_type="application/vnd.google-apps.folder",
+    )
+    _provision_file(
+        db,
+        connector_id=connector.id,
+        name="Finance.pdf",
+        mime_type="application/pdf",
+    )
+    _provision_file(
+        db,
+        connector_id=connector.id,
+        name="Marketing",
+        mime_type="application/vnd.google-apps.folder",
+    )
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
+
+    folders = service.search_folders(
+        connector.id, organization_id=user.organization_id, query="fin", limit=20
+    )
+
+    assert [f.name for f in folders] == ["Finance"]
+
+
+@requires_infra
+def test_search_folders_rejects_a_connector_from_another_organization(db: Session) -> None:
+    user = _provision_user(db)
+    other_user = _provision_user(db)
+    connector = _provision_connector(db, organization_id=user.organization_id, user_id=user.id)
+    service = FileService(db, oauth_client=_FakeGoogleWorkspaceOAuthClient())
+
+    with pytest.raises(NotFoundError):
+        service.search_folders(
+            connector.id, organization_id=other_user.organization_id, query="", limit=20
+        )

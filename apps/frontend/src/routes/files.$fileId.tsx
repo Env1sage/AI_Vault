@@ -1,23 +1,31 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, redirect } from "@tanstack/react-router";
-import type { FileDetail } from "@vault/types";
+import type { Connector, FileDetail } from "@vault/types";
 import {
   BrainCircuit,
   ChevronLeft,
+  Download,
   ExternalLink,
   FileWarning,
+  FolderInput,
+  PencilLine,
   Sparkles,
   Tag,
   Users,
 } from "lucide-react";
+import { useState } from "react";
 
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MoveDialog } from "@/components/file-explorer/move-dialog";
+import { RenameDialog } from "@/components/file-explorer/rename-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiClient } from "@/lib/api-client";
+import { toast } from "@/components/ui/toaster";
+import { ApiError, apiClient } from "@/lib/api-client";
+import { downloadFile } from "@/lib/download-file";
 import { fileTypeIconElement, fileTypeLabel } from "@/lib/file-icon";
 import { formatBytes } from "@/lib/format-bytes";
 import { formatRelativeTime } from "@/lib/format-relative-time";
@@ -43,13 +51,39 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 function FileDetailPage() {
   const { fileId } = Route.useParams();
+  const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const canManage = user?.role === "owner" || user?.role === "admin";
+  const [renaming, setRenaming] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   const fileQuery = useQuery({
     queryKey: ["files", "detail", fileId],
     queryFn: () => apiClient.get<FileDetail>(`/v1/files/${fileId}`),
   });
 
+  const connectorsQuery = useQuery({
+    queryKey: ["connectors"],
+    queryFn: () => apiClient.get<Connector[]>("/v1/connectors"),
+    enabled: canManage,
+  });
+  const connector = connectorsQuery.data?.find(
+    (candidate) => candidate.provider === "google_workspace" && candidate.status === "connected",
+  );
+
   const file = fileQuery.data;
+  const isOwned = file !== undefined && file.owner_email === connector?.account_email;
+
+  const downloadMutation = useMutation({
+    mutationFn: () => downloadFile(`/v1/files/${fileId}/download`, file?.name ?? "download"),
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : "Couldn't download this file.");
+    },
+  });
+
+  function refreshAfterFileOp() {
+    void queryClient.invalidateQueries({ queryKey: ["files", "detail", fileId] });
+  }
 
   return (
     <AppShell title="File details">
@@ -97,13 +131,34 @@ function FileDetailPage() {
                   ) : null}
                 </div>
               </div>
-              {file.web_view_link && (
-                <Button asChild variant="outline" size="sm" className="shrink-0">
-                  <a href={file.web_view_link} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="size-4" /> Open in Google Drive
-                  </a>
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={downloadMutation.isPending}
+                  onClick={() => downloadMutation.mutate()}
+                >
+                  <Download className="size-4" />
+                  {downloadMutation.isPending ? "Downloading…" : "Download"}
                 </Button>
-              )}
+                {canManage && isOwned && (
+                  <Button variant="outline" size="sm" onClick={() => setRenaming(true)}>
+                    <PencilLine className="size-4" /> Rename
+                  </Button>
+                )}
+                {canManage && isOwned && connector && (
+                  <Button variant="outline" size="sm" onClick={() => setMoving(true)}>
+                    <FolderInput className="size-4" /> Move
+                  </Button>
+                )}
+                {file.web_view_link && (
+                  <Button asChild variant="outline" size="sm">
+                    <a href={file.web_view_link} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="size-4" /> Open in Google Drive
+                    </a>
+                  </Button>
+                )}
+              </div>
             </Card>
 
             <div className="grid gap-4 lg:grid-cols-3">
@@ -349,6 +404,23 @@ function FileDetailPage() {
           </>
         )}
       </div>
+
+      {file && renaming && (
+        <RenameDialog
+          onOpenChange={setRenaming}
+          fileId={file.id}
+          currentName={file.name}
+          onRenamed={refreshAfterFileOp}
+        />
+      )}
+      {file && connector && moving && (
+        <MoveDialog
+          onOpenChange={setMoving}
+          connectorId={connector.id}
+          fileIds={[file.id]}
+          onMoved={refreshAfterFileOp}
+        />
+      )}
     </AppShell>
   );
 }

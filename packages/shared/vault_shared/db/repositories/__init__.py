@@ -5,6 +5,7 @@ from vault_shared.db.repositories.approval_decision_repository import (
     ApprovalDecisionRepository,
 )
 from vault_shared.db.repositories.approval_request_repository import ApprovalRequestRepository
+from vault_shared.db.repositories.archive_job_repository import ArchiveJobRepository
 from vault_shared.db.repositories.audit_log_repository import AuditLogRepository
 from vault_shared.db.repositories.automation_template_repository import (
     AutomationTemplateRepository,
@@ -106,6 +107,7 @@ __all__ = [
     "AIProviderConfigRepository",
     "ApprovalDecisionRepository",
     "ApprovalRequestRepository",
+    "ArchiveJobRepository",
     "AuditLogRepository",
     "AutomationTemplateRepository",
     "CitationRepository",

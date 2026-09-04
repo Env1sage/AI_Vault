@@ -6,6 +6,7 @@ import pytest
 from app.main import app
 from app.presentation.dependencies.auth import get_current_user
 from app.presentation.dependencies.services import (
+    get_approval_service,
     get_execution_job_service,
     get_execution_plan_service,
 )
@@ -84,6 +85,19 @@ def fake_job_service() -> MagicMock:
     app.dependency_overrides.pop(get_execution_job_service, None)
 
 
+@pytest.fixture(autouse=True)
+def fake_approval_service() -> MagicMock:
+    """Instant-execution mode: `create_execution_plan` always depends on
+    `ApprovalService` now (it auto-approves every plan right after
+    creation), so every test hitting this endpoint needs it overridden —
+    autouse, since even the error-path tests reach dependency resolution
+    before their handler-body exception is raised."""
+    service = MagicMock()
+    app.dependency_overrides[get_approval_service] = lambda: service
+    yield service
+    app.dependency_overrides.pop(get_approval_service, None)
+
+
 @pytest.fixture
 def as_owner(owner_user):
     app.dependency_overrides[get_current_user] = lambda: owner_user
@@ -114,6 +128,42 @@ def test_owner_can_create_an_execution_plan(as_owner, fake_plan_service) -> None
 
     assert response.status_code == 201
     assert response.json()["status"] == "pending_approval"
+
+
+def test_create_execution_plan_auto_approves_immediately(
+    as_owner, fake_plan_service, fake_approval_service
+) -> None:
+    """Instant-execution mode: no separate human-approval step — the
+    creator's own plan is auto-approved right after it's built."""
+    plan = _FakeExecutionPlan()
+    fake_plan_service.create_plan.return_value = plan
+
+    response = client.post(
+        "/v1/execution-plans", json={"recommendation_id": str(uuid.uuid4())}
+    )
+
+    assert response.status_code == 201
+    fake_approval_service.auto_decide_as_creator.assert_called_once_with(
+        plan.id, organization_id=as_owner.organization_id, user_id=as_owner.id
+    )
+
+
+def test_create_execution_plan_still_succeeds_when_auto_approval_fails(
+    as_owner, fake_plan_service, fake_approval_service
+) -> None:
+    """E.g. the connector still lacks write scope — plan creation itself
+    must not fail just because instant execution couldn't proceed; the
+    plan stays reviewable from the Approvals page instead."""
+    fake_plan_service.create_plan.return_value = _FakeExecutionPlan()
+    fake_approval_service.auto_decide_as_creator.side_effect = ValidationError(
+        "Cannot approve — execution permissions are not satisfied."
+    )
+
+    response = client.post(
+        "/v1/execution-plans", json={"recommendation_id": str(uuid.uuid4())}
+    )
+
+    assert response.status_code == 201
 
 
 def test_member_cannot_create_an_execution_plan(as_member, fake_plan_service) -> None:

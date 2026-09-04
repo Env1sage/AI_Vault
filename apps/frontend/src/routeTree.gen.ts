@@ -31,6 +31,8 @@ import { Route as UnauthorizedRouteImport } from './routes/unauthorized'
 import { Route as WorkflowExecutionsRouteImport } from './routes/workflow-executions'
 import { Route as WorkflowPoliciesRouteImport } from './routes/workflow-policies'
 import { Route as WorkflowsRouteImport } from './routes/workflows'
+import { Route as ArchivesIndexRouteImport } from './routes/archives.index'
+import { Route as ArchivesArchiveIdRouteImport } from './routes/archives.$archiveId'
 import { Route as ChatIndexRouteImport } from './routes/chat.index'
 import { Route as ChatConversationIdRouteImport } from './routes/chat.$conversationId'
 import { Route as ExecutionJobsIndexRouteImport } from './routes/execution-jobs.index'
@@ -164,6 +166,16 @@ const WorkflowPoliciesRoute = WorkflowPoliciesRouteImport.update({
 const WorkflowsRoute = WorkflowsRouteImport.update({
   id: '/workflows',
   path: '/workflows',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArchivesIndexRoute = ArchivesIndexRouteImport.update({
+  id: '/archives/',
+  path: '/archives/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArchivesArchiveIdRoute = ArchivesArchiveIdRouteImport.update({
+  id: '/archives/$archiveId',
+  path: '/archives/$archiveId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatIndexRoute = ChatIndexRouteImport.update({
@@ -325,6 +337,7 @@ export interface FileRoutesByFullPath {
   '/workflow-executions': typeof WorkflowExecutionsRouteWithChildren
   '/workflow-policies': typeof WorkflowPoliciesRoute
   '/workflows': typeof WorkflowsRouteWithChildren
+  '/archives/$archiveId': typeof ArchivesArchiveIdRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
   '/execution-jobs/$executionJobId': typeof ExecutionJobsExecutionJobIdRoute
   '/execution-plans/$executionPlanId': typeof ExecutionPlansExecutionPlanIdRoute
@@ -337,6 +350,7 @@ export interface FileRoutesByFullPath {
   '/storage-intelligence/old-files': typeof StorageIntelligenceOldFilesRoute
   '/workflow-executions/$workflowExecutionId': typeof WorkflowExecutionsWorkflowExecutionIdRoute
   '/workflows/$workflowId': typeof WorkflowsWorkflowIdRouteWithChildren
+  '/archives/': typeof ArchivesIndexRoute
   '/chat/': typeof ChatIndexRoute
   '/execution-jobs/': typeof ExecutionJobsIndexRoute
   '/execution-plans/': typeof ExecutionPlansIndexRoute
@@ -366,6 +380,7 @@ export interface FileRoutesByTo {
   '/unauthorized': typeof UnauthorizedRoute
   '/workflow-executions': typeof WorkflowExecutionsRouteWithChildren
   '/workflow-policies': typeof WorkflowPoliciesRoute
+  '/archives/$archiveId': typeof ArchivesArchiveIdRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
   '/execution-jobs/$executionJobId': typeof ExecutionJobsExecutionJobIdRoute
   '/execution-plans/$executionPlanId': typeof ExecutionPlansExecutionPlanIdRoute
@@ -376,6 +391,7 @@ export interface FileRoutesByTo {
   '/storage-intelligence/large-files': typeof StorageIntelligenceLargeFilesRoute
   '/storage-intelligence/old-files': typeof StorageIntelligenceOldFilesRoute
   '/workflow-executions/$workflowExecutionId': typeof WorkflowExecutionsWorkflowExecutionIdRoute
+  '/archives': typeof ArchivesIndexRoute
   '/chat': typeof ChatIndexRoute
   '/execution-jobs': typeof ExecutionJobsIndexRoute
   '/execution-plans': typeof ExecutionPlansIndexRoute
@@ -413,6 +429,7 @@ export interface FileRoutesById {
   '/workflow-executions': typeof WorkflowExecutionsRouteWithChildren
   '/workflow-policies': typeof WorkflowPoliciesRoute
   '/workflows': typeof WorkflowsRouteWithChildren
+  '/archives/$archiveId': typeof ArchivesArchiveIdRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
   '/execution-jobs/$executionJobId': typeof ExecutionJobsExecutionJobIdRoute
   '/execution-plans/$executionPlanId': typeof ExecutionPlansExecutionPlanIdRoute
@@ -425,6 +442,7 @@ export interface FileRoutesById {
   '/storage-intelligence/old-files': typeof StorageIntelligenceOldFilesRoute
   '/workflow-executions/$workflowExecutionId': typeof WorkflowExecutionsWorkflowExecutionIdRoute
   '/workflows/$workflowId': typeof WorkflowsWorkflowIdRouteWithChildren
+  '/archives/': typeof ArchivesIndexRoute
   '/chat/': typeof ChatIndexRoute
   '/execution-jobs/': typeof ExecutionJobsIndexRoute
   '/execution-plans/': typeof ExecutionPlansIndexRoute
@@ -463,6 +481,7 @@ export interface FileRouteTypes {
     | '/workflow-executions'
     | '/workflow-policies'
     | '/workflows'
+    | '/archives/$archiveId'
     | '/chat/$conversationId'
     | '/execution-jobs/$executionJobId'
     | '/execution-plans/$executionPlanId'
@@ -475,6 +494,7 @@ export interface FileRouteTypes {
     | '/storage-intelligence/old-files'
     | '/workflow-executions/$workflowExecutionId'
     | '/workflows/$workflowId'
+    | '/archives/'
     | '/chat/'
     | '/execution-jobs/'
     | '/execution-plans/'
@@ -504,6 +524,7 @@ export interface FileRouteTypes {
     | '/unauthorized'
     | '/workflow-executions'
     | '/workflow-policies'
+    | '/archives/$archiveId'
     | '/chat/$conversationId'
     | '/execution-jobs/$executionJobId'
     | '/execution-plans/$executionPlanId'
@@ -514,6 +535,7 @@ export interface FileRouteTypes {
     | '/storage-intelligence/large-files'
     | '/storage-intelligence/old-files'
     | '/workflow-executions/$workflowExecutionId'
+    | '/archives'
     | '/chat'
     | '/execution-jobs'
     | '/execution-plans'
@@ -550,6 +572,7 @@ export interface FileRouteTypes {
     | '/workflow-executions'
     | '/workflow-policies'
     | '/workflows'
+    | '/archives/$archiveId'
     | '/chat/$conversationId'
     | '/execution-jobs/$executionJobId'
     | '/execution-plans/$executionPlanId'
@@ -562,6 +585,7 @@ export interface FileRouteTypes {
     | '/storage-intelligence/old-files'
     | '/workflow-executions/$workflowExecutionId'
     | '/workflows/$workflowId'
+    | '/archives/'
     | '/chat/'
     | '/execution-jobs/'
     | '/execution-plans/'
@@ -599,6 +623,8 @@ export interface RootRouteChildren {
   WorkflowExecutionsRoute: typeof WorkflowExecutionsRouteWithChildren
   WorkflowPoliciesRoute: typeof WorkflowPoliciesRoute
   WorkflowsRoute: typeof WorkflowsRouteWithChildren
+  ArchivesArchiveIdRoute: typeof ArchivesArchiveIdRoute
+  ArchivesIndexRoute: typeof ArchivesIndexRoute
   ConnectorsGoogleCallbackRoute: typeof ConnectorsGoogleCallbackRoute
 }
 
@@ -756,6 +782,20 @@ declare module '@tanstack/react-router' {
       path: '/workflows'
       fullPath: '/workflows'
       preLoaderRoute: typeof WorkflowsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/archives/': {
+      id: '/archives/'
+      path: '/archives'
+      fullPath: '/archives/'
+      preLoaderRoute: typeof ArchivesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/archives/$archiveId': {
+      id: '/archives/$archiveId'
+      path: '/archives/$archiveId'
+      fullPath: '/archives/$archiveId'
+      preLoaderRoute: typeof ArchivesArchiveIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/chat/': {
@@ -1097,6 +1137,8 @@ const rootRouteChildren: RootRouteChildren = {
   WorkflowExecutionsRoute: WorkflowExecutionsRouteWithChildren,
   WorkflowPoliciesRoute: WorkflowPoliciesRoute,
   WorkflowsRoute: WorkflowsRouteWithChildren,
+  ArchivesArchiveIdRoute: ArchivesArchiveIdRoute,
+  ArchivesIndexRoute: ArchivesIndexRoute,
   ConnectorsGoogleCallbackRoute: ConnectorsGoogleCallbackRoute,
 }
 export const routeTree = rootRouteImport

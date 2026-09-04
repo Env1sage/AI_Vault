@@ -148,6 +148,21 @@ def test_list_files_returns_not_found_for_another_organizations_connector(
     assert response.status_code == 404
 
 
+def test_list_files_passes_the_ownership_filter_through(as_member, fake_file_service) -> None:
+    fake_file_service.list_for_connector.return_value = ([], 0)
+
+    response = client.get(f"/v1/connectors/{uuid.uuid4()}/files?ownership=shared")
+
+    assert response.status_code == 200
+    assert fake_file_service.list_for_connector.call_args.kwargs["ownership"] == "shared"
+
+
+def test_list_files_rejects_an_invalid_ownership_value(as_member, fake_file_service) -> None:
+    response = client.get(f"/v1/connectors/{uuid.uuid4()}/files?ownership=nonsense")
+
+    assert response.status_code == 422
+
+
 def test_get_file_detail_requires_authentication(fake_file_service) -> None:
     response = client.get(f"/v1/files/{uuid.uuid4()}")
     assert response.status_code == 401
@@ -224,3 +239,89 @@ def test_get_file_detail_handles_a_file_with_no_enrichment_yet(as_member, fake_f
     assert body["intelligence"] is None
     assert body["knowledge_attributes"] == []
     assert body["related_files"] == []
+
+
+def test_download_file_requires_authentication(fake_file_service) -> None:
+    response = client.get(f"/v1/files/{uuid.uuid4()}/download")
+
+    assert response.status_code == 401
+
+
+def test_download_file_streams_the_bytes(as_member, fake_file_service) -> None:
+    file = _FakeFile()
+    fake_file_service.get_download_stream.return_value = (
+        file,
+        iter([b"pdf-bytes"]),
+        "application/pdf",
+        "Report.pdf",
+    )
+
+    response = client.get(f"/v1/files/{file.id}/download")
+
+    assert response.status_code == 200
+    assert response.content == b"pdf-bytes"
+    assert response.headers["content-type"] == "application/pdf"
+    assert "Report.pdf" in response.headers["content-disposition"]
+
+
+def test_download_file_handles_a_non_ascii_name(as_member, fake_file_service) -> None:
+    """Regression guard, same class of bug the archive download endpoint
+    hit: Content-Disposition must never crash on a non-ASCII filename."""
+    file = _FakeFile(name="Café Menu — Draft.pdf")
+    fake_file_service.get_download_stream.return_value = (
+        file,
+        iter([b"pdf-bytes"]),
+        "application/pdf",
+        "Café Menu — Draft.pdf",
+    )
+
+    response = client.get(f"/v1/files/{file.id}/download")
+
+    assert response.status_code == 200
+    assert "filename*=UTF-8''" in response.headers["content-disposition"]
+
+
+def test_download_file_returns_not_found_for_another_organizations_file(
+    as_member, fake_file_service
+) -> None:
+    fake_file_service.get_download_stream.side_effect = NotFoundError("File not found.")
+
+    response = client.get(f"/v1/files/{uuid.uuid4()}/download")
+
+    assert response.status_code == 404
+
+
+class _FakeFolder:
+    def __init__(self, *, name: str = "Finance") -> None:
+        self.id = uuid.uuid4()
+        self.provider_file_id = f"drive-folder-{name}"
+        self.name = name
+        self.path = f"/{name}"
+
+
+def test_search_folders_requires_authentication(fake_file_service) -> None:
+    response = client.get(f"/v1/connectors/{uuid.uuid4()}/folders")
+    assert response.status_code == 401
+
+
+def test_search_folders_returns_matching_folders(as_member, fake_file_service) -> None:
+    folder = _FakeFolder()
+    fake_file_service.search_folders.return_value = [folder]
+
+    response = client.get(f"/v1/connectors/{uuid.uuid4()}/folders?query=fin")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["name"] == "Finance"
+    assert body[0]["provider_file_id"] == folder.provider_file_id
+
+
+def test_search_folders_returns_not_found_for_another_organizations_connector(
+    as_member, fake_file_service
+) -> None:
+    fake_file_service.search_folders.side_effect = NotFoundError("Connector not found.")
+
+    response = client.get(f"/v1/connectors/{uuid.uuid4()}/folders")
+
+    assert response.status_code == 404

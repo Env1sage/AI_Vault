@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ExecutionPlan, StorageFileListResponse } from "@vault/types";
-import { Archive, ChevronLeft, ChevronRight } from "lucide-react";
+import { Archive, ChevronLeft, ChevronRight, FolderArchive } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "@/components/app-shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toaster";
@@ -45,6 +46,7 @@ export function StorageFileListPage({
   getDate,
 }: StorageFileListPageProps) {
   const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const canManage = user?.role === "owner" || user?.role === "admin";
@@ -58,18 +60,69 @@ export function StorageFileListPage({
       ),
   });
 
+  const items = listQuery.data?.items ?? [];
+
+  // Selection is scoped to the page currently in view — paging away would
+  // otherwise leave a "phantom" selection over files no longer visible.
+  // Cleared directly in the pagination handlers below (not via an effect
+  // keyed on `page`, which would setState synchronously during render).
+  function changePage(next: number) {
+    setPage(next);
+    setSelected(new Set());
+  }
+
+  function toggle(fileId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((prev) =>
+      prev.size === items.length ? new Set() : new Set(items.map((file) => file.id)),
+    );
+  }
+
   const archiveMutation = useMutation({
-    mutationFn: (fileId: string) =>
+    mutationFn: (fileIds: string[]) =>
       apiClient.post<ExecutionPlan>("/v1/execution-plans", {
-        file_ids: [fileId],
+        file_ids: fileIds,
         action_type: "archive",
       }),
     onSuccess: (plan) => {
       void queryClient.invalidateQueries({ queryKey: ["execution-plans"] });
-      toast.success("Archive plan created", {
-        description: "Nothing happens until you approve it — it moves to Google Drive's Trash only after that, and is reversible.",
+      setSelected(new Set());
+      toast.success("Moving to Trash now", {
+        description: "Runs immediately — no approval step required. Recoverable from Google Drive's Trash.",
         action: {
-          label: "Review & approve",
+          label: "View progress",
+          onClick: () => {
+            window.location.href = `/execution-plans/${plan.id}`;
+          },
+        },
+      });
+    },
+    onError: (error) => {
+      toast.error(error instanceof ApiError ? error.message : "Couldn't create an archive plan.");
+    },
+  });
+
+  const createArchiveMutation = useMutation({
+    mutationFn: (fileIds: string[]) =>
+      apiClient.post<ExecutionPlan>("/v1/execution-plans", {
+        file_ids: fileIds,
+        action_type: "create_archive",
+      }),
+    onSuccess: (plan) => {
+      void queryClient.invalidateQueries({ queryKey: ["execution-plans"] });
+      setSelected(new Set());
+      toast.success("Creating archive now", {
+        description: "Runs immediately — no approval step required.",
+        action: {
+          label: "View progress",
           onClick: () => {
             window.location.href = `/execution-plans/${plan.id}`;
           },
@@ -82,6 +135,7 @@ export function StorageFileListPage({
   });
 
   const total = listQuery.data?.total ?? 0;
+  const allOnPageSelected = items.length > 0 && selected.size === items.length;
 
   return (
     <AppShell title={title}>
@@ -113,51 +167,106 @@ export function StorageFileListPage({
           <EmptyState icon={emptyIcon} title={emptyTitle} description={emptyDescription} />
         )}
 
-        {listQuery.data && listQuery.data.items.length > 0 && (
-          <Card className="flex flex-col divide-y divide-border p-1">
-            {listQuery.data.items.map((file) => {
-              const date = getDate(file);
-              return (
-                <div
-                  key={file.id}
-                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm"
-                >
-                  <Link
-                    to="/files/$fileId"
-                    params={{ fileId: file.id }}
-                    className="flex min-w-0 flex-1 items-center gap-3 hover:text-primary"
-                  >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-                      {fileTypeIconElement(file.mime_type, { className: "size-4" })}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{file.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">{file.path}</p>
-                    </div>
-                  </Link>
-                  <div className="shrink-0 text-right text-xs text-muted-foreground">
-                    <p>{formatBytes(file.size_bytes ?? 0)}</p>
-                    {date && (
-                      <p>
-                        {dateLabel} {formatRelativeTime(date)}
-                      </p>
-                    )}
-                  </div>
-                  {canManage && (
+        {items.length > 0 && (
+          <>
+            {canManage && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={allOnPageSelected} onCheckedChange={toggleAll} />
+                  {selected.size > 0
+                    ? `${selected.size} selected`
+                    : `Select all ${items.length} on this page`}
+                </label>
+                {selected.size > 0 && (
+                  <div className="flex items-center gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="shrink-0"
-                      disabled={archiveMutation.isPending}
-                      onClick={() => archiveMutation.mutate(file.id)}
+                      disabled={createArchiveMutation.isPending}
+                      onClick={() => createArchiveMutation.mutate(Array.from(selected))}
                     >
-                      <Archive className="size-4" /> Archive
+                      <FolderArchive className="size-4" />
+                      {createArchiveMutation.isPending ? "Creating…" : "Create Archive"}
                     </Button>
-                  )}
-                </div>
-              );
-            })}
-          </Card>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={archiveMutation.isPending}
+                      onClick={() => archiveMutation.mutate(Array.from(selected))}
+                    >
+                      <Archive className="size-4" />
+                      {archiveMutation.isPending ? "Archiving…" : `Archive ${selected.size}`}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+                      Clear
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Card className="flex flex-col divide-y divide-border p-1">
+              {items.map((file) => {
+                const date = getDate(file);
+                return (
+                  <div
+                    key={file.id}
+                    className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm"
+                  >
+                    {canManage && (
+                      <Checkbox
+                        checked={selected.has(file.id)}
+                        onCheckedChange={() => toggle(file.id)}
+                        aria-label={`Select ${file.name}`}
+                        className="shrink-0"
+                      />
+                    )}
+                    <Link
+                      to="/files/$fileId"
+                      params={{ fileId: file.id }}
+                      className="flex min-w-0 flex-1 items-center gap-3 hover:text-primary"
+                    >
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                        {fileTypeIconElement(file.mime_type, { className: "size-4" })}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{file.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{file.path}</p>
+                      </div>
+                    </Link>
+                    <div className="shrink-0 text-right text-xs text-muted-foreground">
+                      <p>{formatBytes(file.size_bytes ?? 0)}</p>
+                      {date && (
+                        <p>
+                          {dateLabel} {formatRelativeTime(date)}
+                        </p>
+                      )}
+                    </div>
+                    {canManage && (
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={createArchiveMutation.isPending}
+                          onClick={() => createArchiveMutation.mutate([file.id])}
+                        >
+                          <FolderArchive className="size-4" /> Create Archive
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={archiveMutation.isPending}
+                          onClick={() => archiveMutation.mutate([file.id])}
+                        >
+                          <Archive className="size-4" /> Archive
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </Card>
+          </>
         )}
 
         {total > PAGE_SIZE && (
@@ -171,7 +280,7 @@ export function StorageFileListPage({
                 variant="outline"
                 size="sm"
                 disabled={page === 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                onClick={() => changePage(Math.max(0, page - 1))}
               >
                 <ChevronLeft className="size-4" /> Previous
               </Button>
@@ -179,7 +288,7 @@ export function StorageFileListPage({
                 variant="outline"
                 size="sm"
                 disabled={(page + 1) * PAGE_SIZE >= total}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => changePage(page + 1)}
               >
                 Next <ChevronRight className="size-4" />
               </Button>
@@ -188,8 +297,8 @@ export function StorageFileListPage({
         )}
 
         <p className="text-xs text-muted-foreground">
-          Archiving moves a file to Google Drive&rsquo;s Trash only after you approve the plan —
-          never immediate, always reversible.
+          Archiving moves a file to Google Drive&rsquo;s Trash immediately — always reversible from
+          there.
         </p>
       </div>
     </AppShell>

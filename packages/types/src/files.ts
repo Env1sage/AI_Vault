@@ -16,6 +16,16 @@ export interface FileListResponse {
   total: number;
 }
 
+/** Backs the Files browser's "Move to folder" picker.
+ * `provider_file_id` is Drive's own id — the value a move plan's
+ * `new_parent_id` must carry, not this platform's `id`. */
+export interface FolderSummary {
+  id: string;
+  provider_file_id: string;
+  name: string;
+  path: string;
+}
+
 export interface FileMetadata {
   normalized_extension: string | null;
   mime_type_validated: boolean;

@@ -41,6 +41,15 @@ class File(Base):
 
     owner_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Set by ExecutionService right after a successful ARCHIVE/REMOVE_DUPLICATE
+    # trash on Drive (and cleared on rollback) — not by the Scanner, which
+    # never lists trashed items in the first place (Drive's `trashed = false`
+    # filter) and so never sees this flip. A trashed row is excluded from
+    # storage-total aggregation (FileRepository._for_organization,
+    # list_for_organization_with_details) but deliberately NOT deleted —
+    # ExecutionStep.target_file_id's ON DELETE CASCADE would otherwise wipe
+    # out the very RollbackRecord/audit trail the trash action just created.
+    trashed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     permissions_summary: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     version_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     checksum: Mapped[str | None] = mapped_column(String(255), nullable=True)
