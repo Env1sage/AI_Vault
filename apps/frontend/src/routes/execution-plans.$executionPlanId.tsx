@@ -72,6 +72,7 @@ function ExecutionPlanDetailPage() {
   });
 
   const plan = planQuery.data;
+  const isPermanentDelete = plan?.steps.some((step) => step.action_type === "permanent_delete");
 
   return (
     <AppShell title="Execution plan">
@@ -92,6 +93,21 @@ function ExecutionPlanDetailPage() {
 
         {plan && (
           <>
+            {isPermanentDelete && (
+              <Card className="flex items-start gap-3 border-destructive/40 bg-destructive/10 p-4">
+                <ShieldAlert className="mt-0.5 size-5 shrink-0 text-destructive" />
+                <div>
+                  <p className="text-sm font-semibold text-destructive">
+                    This plan permanently deletes files from Google Drive
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Not a Trash action — approving this cannot be undone. Unlike every other plan
+                    in Vault, this one was not auto-approved and needs a real, deliberate decision.
+                  </p>
+                </div>
+              </Card>
+            )}
+
             <Card clay className="p-6">
               <div className="mb-2 flex items-center gap-2">
                 <Badge variant={planStatusBadgeVariant(plan.status)} className="capitalize">

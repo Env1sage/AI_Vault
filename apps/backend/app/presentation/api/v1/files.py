@@ -41,6 +41,20 @@ def list_files(
     return FileListResponse(items=[FileSummaryResponse.from_model(f) for f in files], total=total)
 
 
+@files_router.get("/connectors/{connector_id}/trash", response_model=FileListResponse)
+def list_trashed_files(
+    connector_id: uuid.UUID,
+    limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(get_current_user),
+    service: FileService = Depends(get_file_service),
+) -> FileListResponse:
+    files, total = service.list_trashed_for_connector(
+        connector_id, organization_id=user.organization_id, limit=limit, offset=offset
+    )
+    return FileListResponse(items=[FileSummaryResponse.from_model(f) for f in files], total=total)
+
+
 @files_router.get("/connectors/{connector_id}/folders", response_model=list[FolderSummaryResponse])
 def search_folders(
     connector_id: uuid.UUID,

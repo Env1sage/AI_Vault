@@ -10,6 +10,7 @@ from app.presentation.api.v1.schemas import (
     ExecutionJobResponse,
     ExecutionPlanDetailResponse,
     ExecutionPlanResponse,
+    PermanentDeleteRequest,
 )
 from app.presentation.dependencies.auth import get_current_user, require_role
 from app.presentation.dependencies.rate_limit import rate_limiter
@@ -93,6 +94,31 @@ def create_execution_plan(
     # attributes in place — the next read below transparently reloads its
     # now-current status ("approved"/"executing"), no separate re-fetch
     # needed on the success path.
+    return ExecutionPlanResponse.from_model(plan)
+
+
+@execution_plans_router.post(
+    "/execution-plans/permanent-delete",
+    response_model=ExecutionPlanResponse,
+    status_code=201,
+    dependencies=[Depends(_create_plan_rate_limit)],
+)
+def create_permanent_delete_plan(
+    request: PermanentDeleteRequest,
+    user: User = Depends(_require_owner_or_admin),
+    service: ExecutionPlanService = Depends(get_execution_plan_service),
+) -> ExecutionPlanResponse:
+    """Deliberately never calls `auto_decide_as_creator` — every other
+    execution plan in this app auto-approves instantly, but a real,
+    unrecoverable Drive deletion always has to wait for a genuine, separate
+    approval from the Approvals page, no matter who created it."""
+    if not request.file_ids:
+        raise ValidationError("Select at least one file.")
+    plan = service.create_permanent_delete_plan(
+        [uuid.UUID(fid) for fid in request.file_ids],
+        organization_id=user.organization_id,
+        user_id=user.id,
+    )
     return ExecutionPlanResponse.from_model(plan)
 
 

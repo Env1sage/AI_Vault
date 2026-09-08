@@ -1072,6 +1072,15 @@ class CreateExecutionPlanRequest(BaseModel):
     new_parent_id: str | None = None
 
 
+class PermanentDeleteRequest(BaseModel):
+    """Its own request shape, its own endpoint — never folded into
+    `CreateExecutionPlanRequest`'s `action_type` allowlist, so a
+    real, unrecoverable Drive deletion can never be reached through the
+    generic ad-hoc plan path."""
+
+    file_ids: list[str]
+
+
 class ApprovalRequestResponse(BaseModel):
     id: str
     execution_plan_id: str
