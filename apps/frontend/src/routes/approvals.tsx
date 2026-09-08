@@ -259,8 +259,9 @@ function ApprovalQueuePage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Approval Queue</h1>
           <p className="text-sm text-muted-foreground">
-            Approving a plan enqueues real Google Drive changes. Every decision is recorded with
-            who made it, when, and why.
+            Plans normally execute immediately — nothing to approve. A plan only lands here when
+            something blocked its auto-execution (e.g. a connector needing reconnection); deciding
+            it here enqueues real Google Drive changes, recorded with who made it, when, and why.
           </p>
         </div>
 

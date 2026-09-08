@@ -38,12 +38,21 @@ _EXECUTABLE_RULES: dict[str, str] = {
 
 # Storage Intelligence's ad-hoc plans (large/old/inactive/temporary-
 # candidate listings, where the user picks specific files directly rather
-# than acting on a precomputed group) are deliberately restricted to
-# ARCHIVE only — Drive Trash, reversible, the same narrow allowlist
-# philosophy as `_EXECUTABLE_RULES` (ADR-020). MOVE/RENAME/UPDATE_METADATA
-# have no obvious "clean up this file" meaning here and stay unreachable
-# from this path.
-_AD_HOC_ALLOWED_ACTIONS = frozenset({ExecutionActionType.ARCHIVE})
+# than acting on a precomputed group) are deliberately restricted to a
+# narrow allowlist — the same philosophy as `_EXECUTABLE_RULES` (ADR-020).
+# ARCHIVE (Drive Trash) is reversible; CREATE_ARCHIVE (Archive MVP) never
+# mutates Drive at all, only reads. RENAME/MOVE_FILE are the Files browser's
+# real file-explorer operations (each needs its own `new_name`/
+# `new_parent_id` parameter, validated in `create_ad_hoc_plan`).
+# UPDATE_METADATA/MOVE_FOLDER have no caller yet and stay unreachable.
+_AD_HOC_ALLOWED_ACTIONS = frozenset(
+    {
+        ExecutionActionType.ARCHIVE,
+        ExecutionActionType.CREATE_ARCHIVE,
+        ExecutionActionType.RENAME,
+        ExecutionActionType.MOVE_FILE,
+    }
+)
 _MAX_AD_HOC_FILES = 500
 
 # Execution risk is a different question than the recommendation's own
@@ -176,22 +185,36 @@ class ExecutionPlanService:
         action_type: str,
         organization_id: uuid.UUID,
         user_id: uuid.UUID,
+        new_name: str | None = None,
+        new_parent_id: str | None = None,
     ) -> ExecutionPlan:
         """Storage Intelligence's large/old/inactive/temporary-candidate
         listings are live queries, not precomputed groups (ADR-023) — there
         is no `DuplicateGroup`-shaped row to originate a plan from, only the
         set of file ids the user picked on that listing page. Restricted to
-        `ARCHIVE` (see `_AD_HOC_ALLOWED_ACTIONS`) and re-verifies every id
-        actually belongs to this organization via
-        `FileRepository.list_owned_by_organization` — unlike the other two
-        `create_plan*` methods, nothing upstream already guaranteed that
-        for a caller-supplied id list."""
+        `_AD_HOC_ALLOWED_ACTIONS` and re-verifies every id actually belongs
+        to this organization via `FileRepository.list_owned_by_organization`
+        — unlike the other two `create_plan*` methods, nothing upstream
+        already guaranteed that for a caller-supplied id list.
+
+        `new_name`/`new_parent_id` are the Files browser's real
+        file-explorer operations' one extra parameter each: a `RENAME` plan
+        always targets exactly one file (renaming N files to the same
+        literal string has no sensible meaning), while `MOVE_FILE` moves
+        every selected file to the same destination folder."""
         if action_type not in _AD_HOC_ALLOWED_ACTIONS:
             raise ValidationError(f"'{action_type}' is not a supported ad-hoc action.")
         if not file_ids:
             raise ValidationError("Select at least one file.")
         if len(file_ids) > _MAX_AD_HOC_FILES:
             raise ValidationError(f"Select at most {_MAX_AD_HOC_FILES} files at a time.")
+        if action_type == ExecutionActionType.RENAME:
+            if len(file_ids) != 1:
+                raise ValidationError("Rename one file at a time.")
+            if not new_name or not new_name.strip():
+                raise ValidationError("A new name is required.")
+        if action_type == ExecutionActionType.MOVE_FILE and not new_parent_id:
+            raise ValidationError("A destination folder is required.")
 
         ordered_files = self._files.list_owned_by_organization(
             file_ids, organization_id=organization_id
@@ -202,6 +225,17 @@ class ExecutionPlanService:
                 "Refresh and try again."
             )
 
+        planned_change_by_file_id: dict[uuid.UUID, dict] | None = None
+        if action_type == ExecutionActionType.RENAME:
+            planned_change_by_file_id = {
+                ordered_files[0].id: {"action": action_type, "new_name": new_name.strip()}
+            }
+        elif action_type == ExecutionActionType.MOVE_FILE:
+            planned_change_by_file_id = {
+                file.id: {"action": action_type, "new_parent_id": new_parent_id}
+                for file in ordered_files
+            }
+
         return self._create_plan_with_approval(
             organization_id=organization_id,
             user_id=user_id,
@@ -210,6 +244,7 @@ class ExecutionPlanService:
             action_type=action_type,
             ordered_files=ordered_files,
             audit_metadata={"ad_hoc_action": action_type, "requested_file_count": len(file_ids)},
+            planned_change_by_file_id=planned_change_by_file_id,
         )
 
     def _create_plan_with_approval(
@@ -222,6 +257,7 @@ class ExecutionPlanService:
         action_type: str,
         ordered_files: list[File],
         audit_metadata: dict,
+        planned_change_by_file_id: dict[uuid.UUID, dict] | None = None,
     ) -> ExecutionPlan:
         total_bytes = sum(f.size_bytes or 0 for f in ordered_files)
         plan = self._plans.create(
@@ -237,13 +273,16 @@ class ExecutionPlanService:
             required_permissions=["google_workspace:drive:write"],
         )
         for index, file in enumerate(ordered_files):
+            planned_change = (planned_change_by_file_id or {}).get(
+                file.id, {"action": action_type}
+            )
             self._steps.create(
                 execution_plan_id=plan.id,
                 step_order=index,
                 action_type=action_type,
                 target_file_id=file.id,
                 pre_state=self._pre_state(file),
-                planned_change={"action": action_type},
+                planned_change=planned_change,
             )
 
         settings = get_settings()

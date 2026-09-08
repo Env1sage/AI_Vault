@@ -3,6 +3,7 @@ import uuid
 from vault_shared.connectors.google_drive import GoogleDriveClient
 from vault_shared.connectors.google_workspace import get_google_workspace_oauth_client
 from vault_shared.db.session import get_session_factory
+from vault_shared.object_storage import ObjectStorageClient
 from vault_shared.settings import get_settings
 from worker.celery_app import celery_app
 from worker.execution.execution_service import ExecutionService
@@ -29,6 +30,7 @@ def run_execution(execution_job_id: str) -> None:
             session,
             drive_client=GoogleDriveClient(),
             oauth_client=get_google_workspace_oauth_client(),
+            object_storage_client=ObjectStorageClient(),
         )
         service.run(uuid.UUID(execution_job_id))
     finally:

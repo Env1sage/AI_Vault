@@ -112,8 +112,21 @@ class RecommendationService:
                 classification=classification,
                 workspace_domain=domain,
             )
-            for file, metadata, classification, domain in detail_rows
+            for file, metadata, classification, domain, _account_email in detail_rows
         ]
+        # Storage totals only count what this account actually owns — a
+        # file shared by someone else never counted against this account's
+        # real Drive quota and can't be acted on (ExecutionService can't
+        # trash it: insufficientFilePermissions). The ownership rules above
+        # still see every row via `rows`/`context`; only the two totals
+        # below are scoped down, same reasoning as FileRepository.
+        # _for_organization's own ownership filter (Storage Intelligence).
+        owned_file_ids = {
+            file.id
+            for file, _m, _c, _d, account_email in detail_rows
+            if file.owner_email == account_email
+        }
+        owned_rows = [row for row in rows if row.file.id in owned_file_ids]
         context = RuleContext(
             organization_id=organization_id,
             rows=rows,
@@ -198,22 +211,27 @@ class RecommendationService:
                     )
 
         active_count = self._recommendations.count_active_for_organization(organization_id)
-        classified_count = sum(1 for row in rows if row.classification is not None)
-        pending_enrichment_count = sum(1 for row in rows if row.metadata is None)
+        # Scoped to owned_rows, not all of `rows` — everything in this
+        # snapshot is now consistently "your own files" (total_files,
+        # classified/unclassified, completeness score all share the same
+        # denominator), matching total_storage_bytes above. The rule/insight
+        # engines above still ran against every visible file via `rows`.
+        classified_count = sum(1 for row in owned_rows if row.classification is not None)
+        pending_enrichment_count = sum(1 for row in owned_rows if row.metadata is None)
         self._snapshots.create(
             organization_id=organization_id,
             recommendation_job_id=job.id,
             connected_providers=len(connectors),
-            total_files=len(rows),
+            total_files=len(owned_rows),
             total_folders=folder_count,
-            total_storage_bytes=sum(row.file.size_bytes or 0 for row in rows),
+            total_storage_bytes=sum(row.file.size_bytes or 0 for row in owned_rows),
             classified_files=classified_count,
-            unclassified_files=len(rows) - classified_count,
+            unclassified_files=len(owned_rows) - classified_count,
             pending_enrichment_files=pending_enrichment_count,
             embedded_files=len(context.embedded_file_ids),
             relationship_count=len(relationships),
             active_recommendations=active_count,
-            knowledge_completeness_score=(classified_count / len(rows)) if rows else 0.0,
+            knowledge_completeness_score=(classified_count / len(owned_rows)) if owned_rows else 0.0,
         )
         self._db.commit()
         return active_count

@@ -151,6 +151,24 @@ class Settings(BaseSettings):
     ai_max_large_file_threshold_bytes: int = 5 * 1024**4
     ai_max_age_days: int = 3650
 
+    # Archive MVP (ADR — Archive MVP) — object storage for compressed
+    # archive packages (see `ObjectStorageClient`). Defaults match
+    # docker-compose's local `minio` service; a real deployment points
+    # these at an actual S3 bucket/credentials instead. No safe production
+    # default for the access/secret key, same reasoning as
+    # `connector_encryption_key` above.
+    object_storage_endpoint_url: str = "http://minio:9000"
+    object_storage_access_key: str = "vault-minio"
+    object_storage_secret_key: str = "vault-minio-secret"
+    object_storage_bucket: str = "vault-archives"
+    object_storage_secure: bool = False
+    # Bounds per-file worker memory while building an archive zip —
+    # `GoogleDriveClient.download_file`/`export_file` return full bytes in
+    # memory, there's no streaming download today. A file over this size is
+    # skipped (its step fails individually) rather than risking the whole
+    # worker process.
+    archive_max_file_size_bytes: int = 200 * 1024**2
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
