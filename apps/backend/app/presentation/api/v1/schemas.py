@@ -247,9 +247,14 @@ class FileSummaryResponse(BaseModel):
     is_shared: bool
     owner_email: str | None
     provider_modified_at: datetime | None
+    # Only ever populated by the Trash listing endpoint (whether a
+    # completed archive already backs this file) — every other caller
+    # leaves it unset, since ownership of "is this backed up" doesn't
+    # apply outside the permanent-delete eligibility question.
+    is_archived: bool | None = None
 
     @classmethod
-    def from_model(cls, file: File) -> "FileSummaryResponse":
+    def from_model(cls, file: File, *, is_archived: bool | None = None) -> "FileSummaryResponse":
         return cls(
             id=str(file.id),
             name=file.name,
@@ -259,6 +264,7 @@ class FileSummaryResponse(BaseModel):
             is_shared=file.is_shared,
             owner_email=file.owner_email,
             provider_modified_at=file.provider_modified_at,
+            is_archived=is_archived,
         )
 
 

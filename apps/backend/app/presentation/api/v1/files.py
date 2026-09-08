@@ -5,6 +5,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
+from app.application.archive_service import ArchiveService
 from app.application.file_service import FileService
 from app.presentation.api.v1.schemas import (
     FileDetailResponse,
@@ -13,7 +14,7 @@ from app.presentation.api.v1.schemas import (
     FolderSummaryResponse,
 )
 from app.presentation.dependencies.auth import get_current_user
-from app.presentation.dependencies.services import get_file_service
+from app.presentation.dependencies.services import get_archive_service, get_file_service
 from vault_shared.db.models import User
 
 files_router = APIRouter(tags=["files"])
@@ -48,11 +49,18 @@ def list_trashed_files(
     offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
     service: FileService = Depends(get_file_service),
+    archives: ArchiveService = Depends(get_archive_service),
 ) -> FileListResponse:
     files, total = service.list_trashed_for_connector(
         connector_id, organization_id=user.organization_id, limit=limit, offset=offset
     )
-    return FileListResponse(items=[FileSummaryResponse.from_model(f) for f in files], total=total)
+    archived_ids = archives.list_archived_file_ids(user.organization_id)
+    return FileListResponse(
+        items=[
+            FileSummaryResponse.from_model(f, is_archived=f.id in archived_ids) for f in files
+        ],
+        total=total,
+    )
 
 
 @files_router.get("/connectors/{connector_id}/folders", response_model=list[FolderSummaryResponse])
